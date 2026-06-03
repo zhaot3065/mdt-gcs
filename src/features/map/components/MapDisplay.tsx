@@ -13,6 +13,7 @@ import { useMapStore } from '../store/use-map-store';
 import { useVehicleStore } from '@/features/vehicle/store/use-vehicle-store';
 import { VehicleIcon } from './VehicleIcon';
 import { MapLayerToggle } from './MapLayerToggle';
+import { MapHudOverlay } from './MapHudOverlay';
 import 'leaflet/dist/leaflet.css';
 import './MapDisplay.css';
 
@@ -109,6 +110,7 @@ export function MapDisplay() {
       </MapContainer>
 
       <MapLayerToggle />
+      <MapHudOverlay />
 
       {!connected && (
         <div className="pointer-events-none absolute bottom-3 left-3 z-[1000] rounded-md bg-slate-900/90 px-2 py-1 text-xs text-slate-400 ring-1 ring-slate-600">

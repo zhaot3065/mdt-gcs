@@ -42,6 +42,15 @@ export interface VehicleVfrHud {
   lastUpdatedAt: number;
 }
 
+/** MAVLink ATTITUDE (#30) — degrees for UI */
+export interface VehicleAttitude {
+  rollDeg: number | null;
+  pitchDeg: number | null;
+  /** Yaw 0–360° (heading) */
+  yawDeg: number | null;
+  lastUpdatedAt: number;
+}
+
 export interface VehicleState {
   /** HEARTBEAT seen within stale window */
   connected: boolean;
@@ -51,6 +60,7 @@ export interface VehicleState {
   position: VehiclePosition;
   battery: VehicleBattery;
   vfrHud: VehicleVfrHud;
+  attitude: VehicleAttitude;
 }
 
 export const VEHICLE_STALE_MS = 5000;
@@ -65,6 +75,7 @@ export const VEHICLE_BROADCAST_MS = 150;
 export const MAVLINK_MSG_ID = {
   HEARTBEAT: 0,
   SYS_STATUS: 1,
+  ATTITUDE: 30,
   GLOBAL_POSITION_INT: 33,
   VFR_HUD: 74,
 } as const;
@@ -101,6 +112,12 @@ export function createInitialVehicleState(now = 0): VehicleState {
       airspeedMs: null,
       groundspeedMs: null,
       climbMs: null,
+      lastUpdatedAt: 0,
+    },
+    attitude: {
+      rollDeg: null,
+      pitchDeg: null,
+      yawDeg: null,
       lastUpdatedAt: 0,
     },
   };

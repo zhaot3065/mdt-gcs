@@ -3,7 +3,7 @@
 > **Repo:** https://github.com/zhaot3065/mdt-gcs  
 > **Branch:** `main`  
 > **Purpose:** Paste this document (or sections) into Gemini when you cannot clone the repo.  
-> **Last updated:** 2026-06-03 — + H16 serial connect UI
+> **Last updated:** 2026-06-04 — + TIMESYNC RTT + Electron CJS/serialport build fix
 
 ---
 
@@ -41,7 +41,9 @@ MDT_GCS/
 │   └── map.ts                    # Tile URLs, map mode constants
 ├── electron/connection/
 │   ├── connection-manager.ts
-│   ├── mavlink-router.ts         # Dedup + active link + 'frame' event
+│   ├── mavlink-router.ts         # Dedup + active link + rttSlotProvider
+│   ├── timesync-rtt.ts           # GCS-initiated TIMESYNC #111 → per-link RTT
+│   ├── mavlink-pack.ts           # Shared MAVLink v2 packer (Main egress)
 │   ├── mavlink-parser.ts         # frame → VehicleState
 │   ├── mavlink-command.ts        # COMMAND_LONG encoder
 │   ├── command-egress.ts         # active-link send guard
@@ -69,7 +71,7 @@ electron/protocol/gcs-tiles-protocol.ts  # protocol.handle → userData/maps
 Payload: **`DatalinkIpcPayload`** = `{ links[2], router, updatedAt }`
 
 - Each link: `metrics`, `health` (`isLive`, `isActiveRoute`, …)
-- Router: `activeLinkId`, `selectionReason`, dedup metrics, `rtt` (heartbeat_proxy; TIMESYNC hook ready)
+- Router: `activeLinkId`, `selectionReason`, dedup metrics, `rtt` (`RttEstimate`: TIMESYNC preferred, `heartbeat_proxy` fallback)
 
 Invoke:
 - `ethernet:connect|disconnect` → `DatalinkIpcPayload`
@@ -183,6 +185,7 @@ MavlinkRouter 'frame' → MavlinkTelemetryParser
   msg 0  HEARTBEAT           → heartbeat.*
   msg 33 GLOBAL_POSITION_INT → position.*
   msg 1  SYS_STATUS          → battery.*
+  msg 30 ATTITUDE             → attitude.roll/pitch/yaw (deg)
   msg 74 VFR_HUD             → vfrHud.* (+ heading fallback)
   → dirty flag → 150ms throttle → vehicle:state
 ```
@@ -234,6 +237,10 @@ Renderer: window.gcs.vehicle.sendCommand({ command: 'arm'|'disarm'|'rtl' })
 | Egress | send-command IPC, COMMAND_LONG arm/disarm/rtl/set_mode |
 | Flight mode UI | FlightModeSelector + DO_SET_MODE |
 | H16 UI | H16ConnectPanel + SerialPort.list |
+| TIMESYNC RTT | `timesync-rtt.ts` + router `rttSlotProvider` + UI RTT display |
+| Electron build | `main.cjs` / `preload.cjs`; `serialport` external + CJS lib format |
+
+**Build note:** `package.json` has `"type":"module"` — Main/Preload must be **`.cjs`** + `lib.formats: ['cjs']` in `vite.config.ts` so `serialport` native bindings and `__dirname` work.
 
 ---
 
@@ -244,32 +251,30 @@ Renderer: window.gcs.vehicle.sendCommand({ command: 'arm'|'disarm'|'rtl' })
 | Dual link + router + dedup | Mission upload / geo-fence |
 | Command egress (arm/disarm/rtl/set_mode) | Full MAVLink dialect |
 | Flight mode dropdown + confirm | — |
-| Telemetry parser (4 msg types) | Full MAVLink dialect / mission protocol |
+| Telemetry parser (5 msg types incl. ATTITUDE) | Mission protocol |
 | H16 serial connect UI | Mission planner |
-| Vehicle IPC + monitor UI | TIMESYNC RTT |
-| Hybrid map (OSM + gcs-tiles) | HUD overlay |
+| Vehicle IPC + monitor UI | — |
+| Hybrid map (OSM + gcs-tiles) | — |
+| Map HUD overlay (ATTITUDE + VFR readouts) | Mission planner |
 | Leaflet + vehicle marker | — |
-| TIMESYNC hook on router (`rttProvider`) | Wired |
+| TIMESYNC RTT (per-link, 1.5s ping, EWMA) | — |
+| Router RTT in toolbar + RouterStatusPanel | — |
 
 ---
 
 ## 9. Suggested next prompts for Gemini
 
-**A. TIMESYNC RTT (priority)**
+**A. HUD overlay on map (priority)**
 
-> Parse TIMESYNC in Main, inject `MavlinkRouter({ rttProvider })`, surface in router snapshot.
+> Add `VehicleAttitude` + ATTITUDE (#30) parse in Main; overlay on `MapDisplay` (airspeed, alt, heading, artificial horizon) via `useVehicleStore`.
 
-**B. HUD overlay on map**
-
-> Attitude/airspeed HUD using `useVehicleStore` + future ATTITUDE parse.
-
-**C. Mission planner**
+**B. Mission planner**
 
 > Mission items egress via same active-link guard; extend `GcsCommandType` as needed.
 
-**D. Extend telemetry**
+**C. Extend telemetry**
 
-> Add ATTITUDE, GPS_RAW_INT to `mavlink-parser.ts`; extend `VehicleState` in `shared/types/vehicle.ts` first.
+> Add GPS_RAW_INT, BATTERY_STATUS to `mavlink-parser.ts`; extend `shared/types/vehicle.ts` first.
 
 ---
 
@@ -318,7 +323,7 @@ Main: transport → router (dedup) → telemetry parser → vehicle:state
 
 Renderer: H16ConnectPanel (getSerialPorts on mount), EthernetConnectPanel, FlightModeSelector, VehicleCommandControls
 
-Next: TIMESYNC, HUD overlay, mission planner.
+TIMESYNC RTT + map HUD done. Next: mission planner.
 Paste full spec: docs/GEMINI_REVIEW.md
 ```
 

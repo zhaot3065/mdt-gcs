@@ -72,6 +72,11 @@
   white-space: nowrap;
 }
 
+.route-rtt {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
 .link-meta {
   font-size: 0.7rem;
   font-family: var(--font-mono);

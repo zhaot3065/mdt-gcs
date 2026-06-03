@@ -1,0 +1,109 @@
+.map-hud-overlay {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 1000;
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  pointer-events: none;
+  opacity: 0.92;
+}
+
+.map-hud-overlay[data-connected='false'] {
+  opacity: 0.55;
+}
+
+.hud-horizon {
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid rgba(61, 158, 255, 0.65);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), inset 0 0 12px rgba(0, 0, 0, 0.45);
+  background: #0a0c10;
+  position: relative;
+}
+
+.hud-pitch-ladder {
+  position: absolute;
+  inset: -50%;
+  width: 200%;
+  height: 200%;
+  left: -50%;
+  transition: transform 0.08s linear;
+}
+
+.hud-sky {
+  height: 50%;
+  background: linear-gradient(180deg, #1a4a7a 0%, #2d6ba8 100%);
+}
+
+.hud-ground {
+  height: 50%;
+  background: linear-gradient(0deg, #3d2e14 0%, #6b4f22 100%);
+}
+
+.hud-roll-index {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 72%;
+  height: 2px;
+  margin-left: -36%;
+  margin-top: -1px;
+  background: rgba(255, 220, 80, 0.95);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+
+.hud-readouts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 88px;
+  padding: 0.45rem 0.55rem;
+  border-radius: 6px;
+  background: rgba(10, 12, 16, 0.88);
+  border: 1px solid var(--border, #2e3a52);
+  font-size: 0.7rem;
+}
+
+.hud-readout {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.hud-label {
+  color: var(--text-secondary, #9fb0cc);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.hud-value {
+  color: var(--text-primary, #e8edf5);
+  font-weight: 600;
+}
+
+.hud-mode {
+  margin-top: 0.2rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--border, #2e3a52);
+  color: var(--accent, #3d9eff);
+  font-weight: 700;
+  font-size: 0.65rem;
+  letter-spacing: 0.03em;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.hud-armed {
+  font-size: 0.55rem;
+  padding: 0.1rem 0.25rem;
+  border-radius: 3px;
+  background: #c44;
+  color: #fff;
+  font-weight: 800;
+}

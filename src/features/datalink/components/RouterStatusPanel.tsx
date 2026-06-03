@@ -1,5 +1,6 @@
 import { useDatalinkFeatureStore } from '../store/use-datalink-store';
 import type { DatalinkId, RouterSelectionReason } from '@shared/types/datalink';
+import { formatRttSlot } from '../utils/rtt-format';
 import './RouterStatusPanel.css';
 
 const LINK_LABEL: Record<DatalinkId, string> = {
@@ -45,10 +46,18 @@ export function RouterStatusPanel() {
         </div>
         <div className="router-stat">
           <span className="label">RTT (active)</span>
-          <span className="value mono">
-            {router.rtt.activeRttMs != null
-              ? `${router.rtt.activeRttMs} ms (${router.rtt.source})`
-              : '—'}
+          <span className="value mono" data-rtt-source={router.rtt.source}>
+            {router.activeLinkId
+              ? formatRttSlot(router.rtt.perLink[router.activeLinkId])
+              : formatRttSlot(
+                  router.rtt.activeRttMs != null
+                    ? {
+                        rttMs: router.rtt.activeRttMs,
+                        source: router.rtt.source,
+                        updatedAt: Date.now(),
+                      }
+                    : undefined,
+                )}
           </span>
         </div>
       </div>
@@ -60,6 +69,7 @@ export function RouterStatusPanel() {
             <th>Eligible</th>
             <th>Active</th>
             <th>Loss</th>
+            <th>RTT</th>
           </tr>
         </thead>
         <tbody>
@@ -74,11 +84,14 @@ export function RouterStatusPanel() {
                   ? `${link.metrics.lossRatePercent.toFixed(1)}%`
                   : '—'}
               </td>
+              <td className="mono">{formatRttSlot(router.rtt.perLink[link.id])}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p className="hint">TIMESYNC RTT will plug into Main via MavlinkRouter rttProvider.</p>
+      <p className="hint">
+        Per-link MAVLink TIMESYNC (#111) RTT when connected; falls back to HEARTBEAT interval estimate.
+      </p>
     </section>
   );
 }

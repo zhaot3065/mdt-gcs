@@ -18,6 +18,7 @@ import { MavlinkStreamStats } from './mavlink-stats';
 import { computeLinkQuality } from './link-quality';
 
 import { MavlinkRouter, buildLinkHealth } from './mavlink-router';
+import { TimesyncRttManager } from './timesync-rtt';
 
 import { UdpTransport } from './udp-socket';
 
@@ -54,11 +55,13 @@ interface LinkRuntime {
 
 const METRICS_INTERVAL_MS = 200;
 
-
-
 export class ConnectionManager {
+  private timesync = new TimesyncRttManager();
 
-  private router = new MavlinkRouter();
+  private router = new MavlinkRouter({
+    rttSlotProvider: (id) => this.timesync.getSlot(id),
+    rttProvider: (id) => this.timesync.getRttMs(id),
+  });
 
 
 
@@ -105,6 +108,7 @@ export class ConnectionManager {
 
 
   private metricsTimer: NodeJS.Timeout | null = null;
+  private timesyncTimer: NodeJS.Timeout | null = null;
 
 
 
@@ -122,20 +126,20 @@ export class ConnectionManager {
 
     }, METRICS_INTERVAL_MS);
 
+    if (this.timesyncTimer) return;
+
+    this.timesyncTimer = setInterval(() => this.runTimesyncPings(), 500);
   }
 
-
-
   stopMetricsBroadcast(): void {
-
     if (this.metricsTimer) {
-
       clearInterval(this.metricsTimer);
-
       this.metricsTimer = null;
-
     }
-
+    if (this.timesyncTimer) {
+      clearInterval(this.timesyncTimer);
+      this.timesyncTimer = null;
+    }
   }
 
 
@@ -333,11 +337,9 @@ export class ConnectionManager {
 
 
     transport.on('data', (chunk: Buffer) => {
-
       link.stats.ingest(chunk);
-
+      this.timesync.handleIncoming(link.id, chunk);
       this.router.ingest(link.id, chunk);
-
     });
 
 
@@ -361,21 +363,25 @@ export class ConnectionManager {
 
 
   private async teardownLink(link: LinkRuntime): Promise<void> {
-
     if (link.active) {
-
       await link.active.disconnect();
-
       link.active.removeAllListeners();
-
       link.active = undefined;
-
     }
 
     link.transport = undefined;
-
     link.endpoint = undefined;
+    this.timesync.resetLink(link.id);
+  }
 
+  private runTimesyncPings(): void {
+    for (const link of this.links.values()) {
+      if (link.state !== 'connected' || !link.active) continue;
+      const transport = link.active;
+      this.timesync.maybeSendPing(link.id, (frame) => {
+        transport.send(frame);
+      });
+    }
   }
 
 

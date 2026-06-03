@@ -143,6 +143,9 @@ export class MavlinkTelemetryParser extends EventEmitter {
       case MAVLINK_MSG_ID.VFR_HUD:
         this.parseVfrHud(payload);
         break;
+      case MAVLINK_MSG_ID.ATTITUDE:
+        this.parseAttitude(payload);
+        break;
       default:
         return;
     }
@@ -201,6 +204,28 @@ export class MavlinkTelemetryParser extends EventEmitter {
     };
   }
 
+  private parseAttitude(payload: Buffer): void {
+    if (payload.length < 28) return;
+    const now = Date.now();
+    const roll = payload.readFloatLE(4);
+    const pitch = payload.readFloatLE(8);
+    const yaw = payload.readFloatLE(12);
+
+    const rollDeg = radToDeg(roll);
+    const pitchDeg = radToDeg(pitch);
+    let yawDeg = radToDeg(yaw);
+    if (yawDeg != null) {
+      yawDeg = ((yawDeg % 360) + 360) % 360;
+    }
+
+    this.state.attitude = {
+      rollDeg,
+      pitchDeg,
+      yawDeg,
+      lastUpdatedAt: now,
+    };
+  }
+
   private parseVfrHud(payload: Buffer): void {
     if (payload.length < 20) return;
     const now = Date.now();
@@ -224,6 +249,11 @@ export class MavlinkTelemetryParser extends EventEmitter {
       };
     }
   }
+}
+
+function radToDeg(rad: number): number | null {
+  if (!Number.isFinite(rad)) return null;
+  return (rad * 180) / Math.PI;
 }
 
 function extractPayload(raw: Buffer): Buffer | null {

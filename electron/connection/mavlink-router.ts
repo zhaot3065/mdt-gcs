@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import type {
   DatalinkId,
   DatalinkSnapshot,
+  LinkRttSlot,
   MavlinkRouterSnapshot,
   RouterSelectionReason,
   RouterMetrics,
@@ -24,8 +25,10 @@ export interface ForwardedMavlinkFrame {
 }
 
 export interface MavlinkRouterOptions {
-  /** Inject TIMESYNC-based RTT later */
+  /** TIMESYNC RTT in ms (legacy — prefer rttSlotProvider) */
   rttProvider?: (linkId: DatalinkId) => number | null;
+  /** Full per-link RTT slot from TimesyncRttManager */
+  rttSlotProvider?: (linkId: DatalinkId) => LinkRttSlot | null;
 }
 
 /**
@@ -44,10 +47,12 @@ export class MavlinkRouter extends EventEmitter {
   private selectionReason: RouterSelectionReason = 'none';
 
   private rttProvider?: (linkId: DatalinkId) => number | null;
+  private rttSlotProvider?: (linkId: DatalinkId) => LinkRttSlot | null;
 
   constructor(options: MavlinkRouterOptions = {}) {
     super();
     this.rttProvider = options.rttProvider;
+    this.rttSlotProvider = options.rttSlotProvider;
   }
 
   /**
@@ -76,7 +81,7 @@ export class MavlinkRouter extends EventEmitter {
    */
   updateActiveLink(links: DatalinkSnapshot[]): void {
     const prev = this.activeLinkId;
-    const { id, reason } = selectActiveLink(links);
+    const { id, reason } = selectActiveLink(links, (linkId) => this.resolveRttMs(linkId));
     this.activeLinkId = id;
     this.selectionReason = reason;
 
@@ -139,21 +144,32 @@ export class MavlinkRouter extends EventEmitter {
     };
   }
 
+  private resolveRttMs(linkId: DatalinkId): number | null {
+    const slot = this.rttSlotProvider?.(linkId);
+    if (slot?.rttMs != null) return slot.rttMs;
+    return this.rttProvider?.(linkId) ?? null;
+  }
+
   private buildRttEstimate(links: DatalinkSnapshot[]): RttEstimate {
     const perLink = {} as RttEstimate['perLink'];
     for (const id of LINK_PRIORITY) {
       const link = links.find((l) => l.id === id);
-      const timesyncRtt = this.rttProvider?.(id) ?? null;
-      if (timesyncRtt !== null) {
-        perLink[id] = { rttMs: timesyncRtt, source: 'timesync', updatedAt: Date.now() };
-      } else if (link && link.state === 'connected' && link.metrics.latencyMs > 0) {
-        perLink[id] = {
-          rttMs: link.metrics.latencyMs,
-          source: 'heartbeat_proxy',
-          updatedAt: link.metrics.updatedAt,
-        };
+      const slot = this.rttSlotProvider?.(id);
+      if (slot && slot.rttMs != null) {
+        perLink[id] = slot;
       } else {
-        perLink[id] = { rttMs: null, source: 'none', updatedAt: Date.now() };
+        const timesyncRtt = this.rttProvider?.(id) ?? null;
+        if (timesyncRtt !== null) {
+          perLink[id] = { rttMs: timesyncRtt, source: 'timesync', updatedAt: Date.now() };
+        } else if (link && link.state === 'connected' && link.metrics.latencyMs > 0) {
+          perLink[id] = {
+            rttMs: link.metrics.latencyMs,
+            source: 'heartbeat_proxy',
+            updatedAt: link.metrics.updatedAt,
+          };
+        } else {
+          perLink[id] = { rttMs: null, source: 'none', updatedAt: Date.now() };
+        }
       }
     }
 
@@ -168,26 +184,31 @@ export class MavlinkRouter extends EventEmitter {
   }
 }
 
-function linkScore(link: DatalinkSnapshot): number {
+function linkScore(link: DatalinkSnapshot, timesyncRttMs: number | null): number {
   if (link.state !== 'connected') return -Infinity;
   if (!link.health.isLive) return -Infinity;
 
   const m = link.metrics;
+  const latencyMs = timesyncRttMs ?? m.latencyMs;
   return (
     1000 -
     m.lossRatePercent * 12 -
-    m.latencyMs * 0.5 -
+    latencyMs * 0.5 -
     m.lastPacketAgeMs * 0.2
   );
 }
 
-function selectActiveLink(links: DatalinkSnapshot[]): {
+function selectActiveLink(
+  links: DatalinkSnapshot[],
+  rttMsForLink?: (linkId: DatalinkId) => number | null,
+): {
   id: DatalinkId | null;
   reason: RouterSelectionReason;
 } {
   const scored = LINK_PRIORITY.map((id) => {
     const link = links.find((l) => l.id === id);
-    return { id, link, score: link ? linkScore(link) : -Infinity };
+    const rtt = rttMsForLink?.(id) ?? null;
+    return { id, link, score: link ? linkScore(link, rtt) : -Infinity };
   }).filter((s) => s.score > -Infinity);
 
   if (scored.length === 0) {

@@ -15,7 +15,7 @@ export type RouterSelectionReason =
   | 'stale_failover'
   | 'tie_break_priority';
 
-/** RTT source — TIMESYNC hook reserved for a later phase */
+/** RTT measurement source (TIMESYNC preferred when available) */
 export type RttSource = 'none' | 'heartbeat_proxy' | 'timesync';
 
 export interface LinkMetrics {
@@ -61,11 +61,14 @@ export interface RouterMetrics {
   lastForwardedAt: number;
 }
 
-/** Per-link RTT slot — populated by TIMESYNC later */
+/** Per-link RTT slot in router snapshot (TIMESYNC or HEARTBEAT fallback) */
 export interface LinkRttSlot {
+  /** Round-trip latency in milliseconds; null when not yet measured */
   rttMs: number | null;
   source: RttSource;
   updatedAt: number;
+  /** TIMESYNC EWMA samples applied (Main only) */
+  sampleCount?: number;
 }
 
 export interface RttEstimate {

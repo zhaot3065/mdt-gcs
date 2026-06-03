@@ -69,7 +69,8 @@ MDT_GCS/
 
 ```
 src/features/mission/
-electron/connection/timesync-rtt.ts   # TIMESYNC → MavlinkRouter.rttProvider
+electron/connection/timesync-rtt.ts   # TIMESYNC #111 → MavlinkRouter rttSlotProvider
+electron/connection/mavlink-pack.ts  # Shared v2 frame packer (commands + TIMESYNC)
 ```
 
 ---
@@ -222,7 +223,7 @@ Ethernet form state (`host`, `port`, `mode`) lives in Zustand so the mini panel 
 | Dedup key | `(sysid, compid, msgid, seq)` with 2 s TTL cache |
 | Active link | Score = freshness + low loss + low latency; Ethernet wins ties within bias |
 | Failover | If Ethernet stale (`lastPacketAgeMs` ≥ 3 s) but H16 live → `stale_failover` |
-| RTT | `RttEstimate` with `heartbeat_proxy` today; inject `rttProvider` for TIMESYNC later |
+| RTT | `TimesyncRttManager` → `rttSlotProvider`; TIMESYNC preferred, `heartbeat_proxy` fallback |
 | Events | `frame` (unique forwarded), `active-link-changed` |
 
 **Next:** command egress only on `router.activeLinkId`; optional backup heartbeat.
@@ -247,6 +248,8 @@ npm run electron:dev    # Vite + Electron with HMR
 npm run typecheck
 npm run build
 ```
+
+**Electron Main build:** `vite.config.ts` externalizes `serialport` and forces `lib.formats: ['cjs']` → `dist-electron/main.cjs` (required when root `package.json` has `"type": "module"`).
 
 Without Electron (`npm run dev` only), `window.gcs` is undefined — UI shows a bridge error; always test datalink under `electron:dev`.
 

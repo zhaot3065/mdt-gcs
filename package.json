@@ -4,10 +4,10 @@
   "description": "ArduPilot GCS with dual datalink (H16 RF + SprintLink Ethernet) — Electron + React",
   "private": false,
   "type": "module",
-  "main": "dist-electron/electron/main.js",
+  "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.node.json && vite build && tsc -p tsconfig.electron.json",
+    "build": "tsc -p tsconfig.node.json && vite build",
     "preview": "vite preview",
     "electron:dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:build": "npm run build && electron-builder",
@@ -23,15 +23,15 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.8",
-    "tailwindcss": "^4.1.8",
     "@types/leaflet": "^1.9.17",
     "@types/node": "^22.15.21",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react": "^4.4.1",
     "concurrently": "^9.1.2",
-    "electron": "^36.2.0",
+    "electron": "^36.9.5",
     "electron-builder": "^26.0.12",
+    "tailwindcss": "^4.1.8",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
     "vite-plugin-electron": "^0.29.0",
@@ -41,7 +41,12 @@
   "build": {
     "appId": "com.mdt.gcs",
     "productName": "MDT GCS",
-    "directories": { "output": "release" },
-    "files": ["dist/**/*", "dist-electron/**/*"]
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ]
   }
 }
