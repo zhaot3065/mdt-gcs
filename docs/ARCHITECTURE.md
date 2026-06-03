@@ -26,7 +26,8 @@ MDT_GCS/
 │   └── ARCHITECTURE.md          # This guide
 ├── shared/
 │   └── types/
-│       └── datalink.ts          # IPC contracts, DatalinkSnapshot (main + renderer)
+│       ├── datalink.ts          # IPC contracts, DatalinkSnapshot (main + renderer)
+│       └── vehicle.ts           # VehicleState + vehicle:state IPC
 ├── electron/                    # MAIN PROCESS — privileged I/O
 │   ├── main.ts                  # Window + IPC registration
 │   ├── preload.ts               # contextBridge → window.gcs
@@ -35,6 +36,7 @@ MDT_GCS/
 │       ├── mavlink-stats.ts
 │       ├── link-quality.ts
 │       ├── mavlink-router.ts    # Dedup + active link selection
+│       ├── mavlink-parser.ts    # Router frames → VehicleState
 │       ├── mavlink-frame.ts     # Shared frame parser
 │       ├── udp-socket.ts
 │       ├── tcp-socket.ts
@@ -43,6 +45,9 @@ MDT_GCS/
 │   ├── features/datalink/
 │   │   ├── store/use-datalink-store.ts
 │   │   └── components/RouterStatusPanel.tsx
+│   ├── features/vehicle/
+│   │   ├── store/use-vehicle-store.ts
+│   │   └── components/VehicleMonitorPanel.tsx
 │   ├── stores/
 │   │   └── datalink-store.ts    # Re-export shim → features/datalink
 │   ├── components/
@@ -121,8 +126,11 @@ Defined in `shared/types/datalink.ts`:
 | `datalink:h16:connect` | invoke | Open serial port |
 | `datalink:h16:disconnect` | invoke | Close serial |
 | `datalink:serial:list` | invoke | List USB/COM ports |
+| `vehicle:state` | Main → Renderer (~150 ms, throttled) | `VehicleState` from `shared/types/vehicle.ts` |
 
 **Rule:** Never pass raw `Buffer` or sockets to the renderer. Only serializable snapshots and connect options.
+
+**Preload:** `window.gcs.vehicle.onState(handler)` mirrors datalink payload subscription.
 
 ---
 

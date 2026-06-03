@@ -3,6 +3,7 @@ import type {
   EthernetConnectOptions,
   SerialConnectOptions,
 } from '@shared/types/datalink';
+import type { VehicleState } from '@shared/types/vehicle';
 
 export interface GcsBridgeApi {
   datalink: {
@@ -12,6 +13,9 @@ export interface GcsBridgeApi {
     connectH16: (opts: SerialConnectOptions) => Promise<DatalinkIpcPayload>;
     disconnectH16: () => Promise<DatalinkIpcPayload>;
     listSerialPorts: () => Promise<{ path: string; manufacturer?: string }[]>;
+  };
+  vehicle: {
+    onState: (handler: (state: VehicleState) => void) => () => void;
   };
 }
 

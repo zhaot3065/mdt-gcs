@@ -26,7 +26,7 @@ npm run electron:dev
 ## Architecture
 
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — IPC flow, directory layout, Zustand integration  
-- **[docs/GEMINI_REVIEW.md](docs/GEMINI_REVIEW.md)** — paste-friendly repo snapshot for Gemini (no clone required)
+- **[docs/GEMINI_REVIEW.md](docs/GEMINI_REVIEW.md)** — paste-friendly repo snapshot for Gemini (dual-link + vehicle telemetry)
 
 ## Repository
 

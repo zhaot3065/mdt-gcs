@@ -3,13 +3,13 @@
 > **Repo:** https://github.com/zhaot3065/mdt-gcs  
 > **Branch:** `main`  
 > **Purpose:** Paste this document (or sections) into Gemini when you cannot clone the repo.  
-> **Last updated:** 2026-06-03 — includes MavlinkRouter + dual-link IPC v2
+> **Last updated:** 2026-06-03 — MavlinkRouter + Vehicle telemetry pipeline
 
 ---
 
 ## 1. Project summary (one paragraph)
 
-**MDT GCS** is an Electron + React ground control station for ArduPilot multicopters/VTOL with **two simultaneous datalinks**: SprintLink **Ethernet** (UDP client/server, TCP client, MAVLink port 14550) and **H16 RF** (USB serial). All socket/serial I/O runs in the **Main process**; React only receives serializable IPC. A **MavlinkRouter** deduplicates identical MAVLink frames from both links and selects an **active route** (prefer Ethernet when healthy). The UI uses a high-contrast dark theme, toolbar signal lamps per link, an Ethernet connect panel, and a router status panel.
+**MDT GCS** is an Electron + React ground control station for ArduPilot multicopters/VTOL with **dual datalinks** (SprintLink Ethernet + H16 USB serial). All I/O and MAVLink processing run in **Main**; React consumes IPC only. **MavlinkRouter** deduplicates frames and picks an active link. **MavlinkTelemetryParser** subscribes to router `frame` events, decodes HEARTBEAT / GLOBAL_POSITION_INT / SYS_STATUS / VFR_HUD into **`VehicleState`**, and broadcasts to the UI every **150 ms**. UI: dark theme, link signal lamps, router panel, **VehicleMonitorPanel** (Tailwind gauges).
 
 ---
 
@@ -18,10 +18,10 @@
 | Layer | Choice |
 |-------|--------|
 | Shell | Electron 36 |
-| UI | React 19 + Vite 6 |
-| State | Zustand 5 (`src/features/datalink/store`) |
+| UI | React 19 + Vite 6 + **Tailwind CSS v4** |
+| State | Zustand 5 — `features/datalink`, `features/vehicle` |
 | Serial | `serialport` 13 (Main only) |
-| Protocol | MAVLink v1/v2 parse in Main (no full message library yet) |
+| Protocol | Hand-rolled MAVLink v1/v2 frame parse in Main |
 
 **Run:** `npm install` → `npm run electron:dev`
 
@@ -32,165 +32,130 @@
 ```
 MDT_GCS/
 ├── docs/
-│   ├── ARCHITECTURE.md       # Full design guide (IPC, flows, roadmap)
-│   └── GEMINI_REVIEW.md      # This file
-├── shared/types/datalink.ts  # IPC contracts — CHANGE FIRST for new features
-├── electron/
-│   ├── main.ts               # Window + ipcMain handlers
-│   ├── preload.ts            # contextBridge → window.gcs
-│   └── connection/
-│       ├── connection-manager.ts  # Links + metrics broadcast
-│       ├── mavlink-router.ts      # Dedup + active link
-│       ├── mavlink-frame.ts       # Frame iterator + dedup key
-│       ├── mavlink-stats.ts       # Per-link loss/latency
-│       ├── link-quality.ts        # good/degraded/poor/offline
-│       ├── udp-socket.ts
-│       ├── tcp-socket.ts
-│       └── serial-port.ts
-└── src/
-    ├── features/datalink/
-    │   ├── store/use-datalink-store.ts
-    │   ├── store/defaults.ts
-    │   └── components/RouterStatusPanel.tsx
-    ├── components/toolbar/DatalinkStatusBar.tsx
-    └── components/connection/EthernetConnectPanel.tsx
+│   ├── ARCHITECTURE.md
+│   └── GEMINI_REVIEW.md          # This file
+├── shared/types/
+│   ├── datalink.ts               # DatalinkIpcPayload — change first for link IPC
+│   └── vehicle.ts                # VehicleState — change first for telemetry IPC
+├── electron/connection/
+│   ├── connection-manager.ts
+│   ├── mavlink-router.ts         # Dedup + active link + 'frame' event
+│   ├── mavlink-parser.ts         # frame → VehicleState
+│   ├── mavlink-frame.ts
+│   ├── mavlink-stats.ts
+│   └── udp / tcp / serial transports
+└── src/features/
+    ├── datalink/                 # useDatalinkFeatureStore, RouterStatusPanel
+    └── vehicle/                  # useVehicleStore, VehicleMonitorPanel
 ```
+
+**Preload:** `window.gcs.datalink.*` + `window.gcs.vehicle.onState(cb)`
 
 ---
 
-## 4. IPC contract (complete)
+## 4. IPC contracts
 
-**Channel name (unchanged):** `datalink:snapshot`  
-**Payload shape (NEW):** `DatalinkIpcPayload` — not a bare array anymore.
+### 4a. Datalink (`datalink:snapshot`, ~200 ms)
+
+Payload: **`DatalinkIpcPayload`** = `{ links[2], router, updatedAt }`
+
+- Each link: `metrics`, `health` (`isLive`, `isActiveRoute`, …)
+- Router: `activeLinkId`, `selectionReason`, dedup metrics, `rtt` (heartbeat_proxy; TIMESYNC hook ready)
+
+Invoke: `ethernet:connect|disconnect`, `h16:connect|disconnect`, `serial:list` → returns `DatalinkIpcPayload`.
+
+### 4b. Vehicle (`vehicle:state`, ~150 ms throttled)
+
+Payload: **`VehicleState`** from `shared/types/vehicle.ts`:
 
 ```typescript
-// shared/types/datalink.ts (conceptual)
-
-type DatalinkId = 'ethernet' | 'h16_rf';
-
-interface DatalinkIpcPayload {
-  links: DatalinkSnapshot[];   // 2 entries, each with metrics + health
-  router: MavlinkRouterSnapshot;
-  updatedAt: number;           // epoch ms
-}
-
-interface DatalinkSnapshot {
-  id: DatalinkId;
-  label: string;
-  state: 'disconnected' | 'connecting' | 'connected' | 'error';
-  quality: 'good' | 'degraded' | 'poor' | 'offline';
-  transport?: 'udp-client' | 'udp-server' | 'tcp-client' | 'serial';
-  endpoint?: string;
-  metrics: LinkMetrics;
-  health: LinkHealth;
-}
-
-interface LinkHealth {
-  isConnected: boolean;
-  isLive: boolean;              // connected && lastPacketAgeMs < 3000
-  isEligibleForActive: boolean;
-  isActiveRoute: boolean;       // id === router.activeLinkId
-}
-
-interface MavlinkRouterSnapshot {
-  activeLinkId: DatalinkId | null;
-  selectionReason:
-    | 'none'
-    | 'ethernet_preferred'
-    | 'h16_fallback'
-    | 'stale_failover'
-    | 'tie_break_priority';
-  metrics: {
-    framesIngested: number;
-    framesDeduped: number;
-    framesForwarded: number;
-    dedupRatePercent: number;
-    lastForwardedAt: number;
+interface VehicleState {
+  connected: boolean;           // HEARTBEAT within 5s
+  lastHeardAt: number;
+  updatedAt: number;
+  heartbeat: {
+    vehicleType: 'multicopter' | 'vtol' | 'fixed_wing' | 'unknown';
+    mavlinkType: number;
+    flightMode: string;         // ArduPilot mode names when autopilot=3
+    customMode: number;
+    isArmed: boolean;
+    autopilot: number;
+    lastUpdatedAt: number;
   };
-  rtt: {
-    activeRttMs: number | null;
-    source: 'none' | 'heartbeat_proxy' | 'timesync';
-    perLink: Record<DatalinkId, { rttMs: number | null; source: ...; updatedAt: number }>;
+  position: {
+    lat: number | null;         // degrees
+    lon: number | null;
+    relativeAltM: number | null;
+    headingDeg: number | null;
+    lastUpdatedAt: number;
+  };
+  battery: {
+    voltageV: number | null;
+    currentA: number | null;
+    percent: number | null;     // null if MAVLink -1
+    lastUpdatedAt: number;
+  };
+  vfrHud: {
+    airspeedMs: number | null;
+    groundspeedMs: number | null;
+    climbMs: number | null;
+    lastUpdatedAt: number;
   };
 }
 ```
 
-**Renderer → Main (invoke):**
+**Preload:** `window.gcs.vehicle.onState(handler)` → unsubscribe fn.
 
-| Channel | Args | Returns |
-|---------|------|---------|
-| `datalink:ethernet:connect` | `{ mode, host, port, localHost?, localPort? }` | `DatalinkIpcPayload` |
-| `datalink:ethernet:disconnect` | — | `DatalinkIpcPayload` |
-| `datalink:h16:connect` | `{ path, baudRate }` | `DatalinkIpcPayload` |
-| `datalink:h16:disconnect` | — | `DatalinkIpcPayload` |
-| `datalink:serial:list` | — | `{ path, manufacturer? }[]` |
-
-**Preload API:** `window.gcs.datalink.onPayload(handler)` — returns unsubscribe function.
-
-**Security:** `contextIsolation: true`, `nodeIntegration: false`. No `Buffer` over IPC.
+**Security:** No `Buffer` over IPC. `contextIsolation: true`.
 
 ---
 
-## 5. Main process data flow
+## 5. Main process pipelines
+
+### Pipeline A — Dual link + router
 
 ```
-[Ethernet UDP/TCP] ──┐
-                     ├── chunk ──► MavlinkStreamStats (per-link metrics)
-[H16 Serial]       ──┘              MavlinkRouter.ingest (dedup)
-                                           │
-                                           ▼
-                              emit 'frame' { linkId, frame }  (for future parser)
-                                           │
-Every 200ms ◄──────────────────────────────┘
-  build DatalinkIpcPayload
-  webContents.send('datalink:snapshot', payload)
+Transport data → MavlinkStreamStats (per link)
+              → MavlinkRouter.ingest → dedup → emit 'frame'
+              → every 200ms: DatalinkIpcPayload → datalink:snapshot
 ```
 
-### MavlinkRouter rules
+### Pipeline B — Telemetry (NEW)
 
-1. **Dedup key:** `sysid:compid:msgid:seq` — TTL **2000 ms** cache.
-2. **Score (higher wins):** `1000 - loss%*12 - latency*0.5 - lastPacketAge*0.2` (only if connected + live).
-3. **Priority order:** `ethernet` > `h16_rf` when scores within bias **5**.
-4. **Failover:** If Ethernet connected but **not live** (age ≥ 3s) and H16 live → `stale_failover` → active = H16.
-5. **RTT today:** HEARTBEAT interval deviation per link (`heartbeat_proxy`). **Extension point:** `new MavlinkRouter({ rttProvider: (id) => ms | null })` for TIMESYNC.
+```
+MavlinkRouter 'frame' → MavlinkTelemetryParser
+  msg 0  HEARTBEAT           → heartbeat.*
+  msg 33 GLOBAL_POSITION_INT → position.*
+  msg 1  SYS_STATUS          → battery.*
+  msg 74 VFR_HUD             → vfrHud.* (+ heading fallback)
+  → dirty flag → 150ms throttle → vehicle:state
+```
 
-### Per-link metrics (MavlinkStreamStats)
-
-- Sequence-gap loss per `(sysid, compid)`.
-- Latency EWMA from ~1s HEARTBEAT deviation.
-- `lastPacketAgeMs` drives stale / signal lamp quality.
-
----
-
-## 6. Renderer / Zustand
-
-**Store:** `useDatalinkFeatureStore` in `src/features/datalink/store/use-datalink-store.ts`
-
-| State field | Source |
-|-------------|--------|
-| `payload` | Full `DatalinkIpcPayload` |
-| `links` | `payload.links` |
-| `router` | `payload.router` |
-| `ethernetForm` | Local UI (host, port, mode) |
-
-On mount: `subscribeIpc()` registers `window.gcs.datalink.onPayload`.
-
-**UI components:**
-
-- `DatalinkStatusBar` — signal lamps + **ROUTE** badge on active link.
-- `EthernetConnectPanel` — IP/port/mode, connect/disconnect.
-- `RouterStatusPanel` — active link, selection reason, dedup %, health table.
-
-Legacy shim: `src/stores/datalink-store.ts` re-exports feature store as `useDatalinkStore`.
+**Router dedup:** `sysid:compid:msgid:seq`, TTL 2s.  
+**Active link:** score + Ethernet priority; stale failover to H16.
 
 ---
 
-## 7. Commit history (high level)
+## 6. Renderer stores
+
+| Store | File | IPC |
+|-------|------|-----|
+| Datalink | `useDatalinkFeatureStore` | `gcs.datalink.onPayload` |
+| Vehicle | `useVehicleStore` | `gcs.vehicle.onState` |
+
+`App.tsx` mounts both subscriptions on load.
+
+**UI:** `DatalinkStatusBar`, `EthernetConnectPanel`, `RouterStatusPanel`, `VehicleMonitorPanel` (Tailwind).
+
+---
+
+## 7. Commit phases
 
 | Phase | Content |
 |-------|---------|
-| Initial | Electron scaffold, UDP/TCP/Serial, per-link stats, dark UI, Zustand |
-| Router | `MavlinkRouter`, `DatalinkIpcPayload`, `src/features/datalink`, ARCHITECTURE §8 |
+| v0.1 | Electron scaffold, dual transport, link metrics UI |
+| Router | MavlinkRouter, DatalinkIpcPayload, features/datalink |
+| Telemetry | vehicle.ts, mavlink-parser, features/vehicle, Tailwind |
 
 ---
 
@@ -198,34 +163,36 @@ Legacy shim: `src/stores/datalink-store.ts` re-exports feature store as `useData
 
 | Done | Not yet |
 |------|---------|
-| Dual link monitor + dedup router | Full MAVLink message decode / mission protocol |
-| Active link **selection** (ingress) | Command **egress** only on active link |
-| Ethernet UI connect | H16 serial connect UI panel |
-| HEARTBEAT latency proxy | MAVLink TIMESYNC RTT |
-| Router status UI stub | Map, HUD, mission planner |
-| `frame` event from router | Consumer (parser) wired |
+| Dual link + router + dedup | Command egress on active link only |
+| Telemetry parser (4 msg types) | Full MAVLink dialect / mission protocol |
+| Vehicle IPC + monitor UI | H16 connect UI panel |
+| ArduPilot flight mode strings | TIMESYNC RTT |
+| Tailwind vehicle gauges | Map, HUD, mission planner |
+| TIMESYNC hook on router (`rttProvider`) | Wired |
 
 ---
 
 ## 9. Suggested next prompts for Gemini
 
-Copy one of these when planning the next iteration:
+**A. Command egress (priority)**
 
-**A. Command egress**
-
-> Wire `MavlinkRouter.getActiveLinkId()` so GCS commands (MISSION_ITEM, COMMAND_LONG) send only on the active transport; keep passive listen on backup. Extend `shared/types/datalink.ts` if UI needs egress link override. Main process only.
+> Use `MavlinkRouter.getActiveLinkId()` and active transport in ConnectionManager to send COMMAND_LONG / MISSION_ITEM only on the active link. Extend `shared/types/datalink.ts` if UI needs manual override.
 
 **B. H16 connect UI**
 
-> Add `src/features/datalink/components/H16ConnectPanel.tsx` using `datalink:serial:list` and `datalink:h16:connect`. Match Ethernet panel styling.
+> `H16ConnectPanel` with `datalink:serial:list` + `h16:connect`, same dark theme as Ethernet panel.
 
 **C. TIMESYNC RTT**
 
-> Add `electron/connection/timesync-rtt.ts`, parse TIMESYNC messages in router path, inject `rttProvider` into `MavlinkRouter`, set `RttEstimate.source = 'timesync'`.
+> Parse TIMESYNC in Main, inject `MavlinkRouter({ rttProvider })`, surface in `MavlinkRouterSnapshot.rtt`.
 
-**D. MAVLink parser consumer**
+**D. Map / HUD**
 
-> Subscribe to `MavlinkRouter` `'frame'` events in Main; feed a minimal message dispatcher for HEARTBEAT, GPS, ATTITUDE for HUD stub.
+> Consume `useVehicleStore` in `src/features/map` or `hud` — lat/lon/heading/alt/battery; keep IPC read-only in Renderer.
+
+**E. Extend telemetry**
+
+> Add ATTITUDE, GPS_RAW_INT to `mavlink-parser.ts`; extend `VehicleState` in `shared/types/vehicle.ts` first.
 
 ---
 
@@ -234,31 +201,41 @@ Copy one of these when planning the next iteration:
 ```text
 DEFAULT_MAVLINK_PORT = 14550
 LINK_STALE_MS = 3000
+VEHICLE_STALE_MS = 5000
 METRICS_INTERVAL_MS = 200
+VEHICLE_BROADCAST_MS = 150
 DEDUP_TTL_MS = 2000
-ETHERNET_SCORE_BIAS = 5
 ```
 
 ---
 
-## 11. Quality / signal lamp thresholds
+## 11. Rules for Gemini
 
-From `link-quality.ts`:
-
-- **good:** loss ≤ 5%, latency/age ≤ 120 ms (and connected, not stale)
-- **degraded:** loss ≤ 15%, ≤ 350 ms
-- **poor:** worse or stale (> 3s since last frame)
-- **offline:** not connected
+1. **Contract first:** `shared/types/datalink.ts` or `shared/types/vehicle.ts` before Main/UI code.
+2. **Parsing / routing / sockets** stay in `electron/connection/*`.
+3. **Renderer** only subscribes via preload — never `require('dgram')` in React.
+4. Per-link stats remain independent; router + parser are layers on top.
 
 ---
 
-## 12. Instructions for Gemini reviewers
+## 12. Short paste block (minimal handoff)
 
-1. Treat **`shared/types/datalink.ts`** as the contract — propose IPC changes before UI/Main logic.
-2. Keep **routing, dedup, sockets** in `electron/connection/*`, not React.
-3. When suggesting code, respect **dual-link independence**: per-link stats always remain; router is an additional fan-in layer.
-4. Reference **`docs/ARCHITECTURE.md`** for diagrams; this file is the **paste-friendly snapshot** of repo state.
+```text
+Repo: https://github.com/zhaot3065/mdt-gcs (main)
+Stack: Electron+React+Zustand+Tailwind. ArduPilot GCS, dual link (ethernet + h16_rf).
+
+IPC:
+- datalink:snapshot → DatalinkIpcPayload (links + router), 200ms
+- vehicle:state → VehicleState, 150ms throttled
+
+Main: ConnectionManager → stats + MavlinkRouter (dedup) → MavlinkTelemetryParser (HB/GPS_INT/SYS_STATUS/VFR_HUD)
+
+Renderer: useDatalinkFeatureStore, useVehicleStore, VehicleMonitorPanel
+
+Next: active-link command egress, H16 UI, TIMESYNC, map/HUD.
+Full detail: docs/GEMINI_REVIEW.md in repo.
+```
 
 ---
 
-*Generated for cross-LLM handoff (Gemini ↔ Cursor). Repo owner: zhaot3065/mdt-gcs.*
+*Cross-LLM handoff (Gemini ↔ Cursor). Maintainer: zhaot3065/mdt-gcs.*

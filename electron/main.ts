@@ -1,15 +1,18 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import { ConnectionManager } from './connection/connection-manager';
+import { MavlinkTelemetryParser } from './connection/mavlink-parser';
 import {
   IPC_CHANNELS,
   type EthernetConnectOptions,
   type SerialConnectOptions,
 } from '../shared/types/datalink';
+import { VEHICLE_BROADCAST_MS } from '../shared/types/vehicle';
 
 const isDev = !app.isPackaged;
 let mainWindow: BrowserWindow | null = null;
 const connectionManager = new ConnectionManager();
+const telemetryParser = new MavlinkTelemetryParser(connectionManager.getRouter());
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -32,9 +35,14 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    connectionManager.stopMetricsBroadcast();
+    telemetryParser.stopBroadcast();
   });
 
+  connectionManager.stopMetricsBroadcast();
+  telemetryParser.stopBroadcast();
   connectionManager.startMetricsBroadcast(() => mainWindow);
+  telemetryParser.startBroadcast(() => mainWindow, VEHICLE_BROADCAST_MS);
 }
 
 function registerIpc(): void {
@@ -72,5 +80,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   connectionManager.stopMetricsBroadcast();
+  telemetryParser.stopBroadcast();
+  telemetryParser.dispose();
   if (process.platform !== 'darwin') app.quit();
 });
