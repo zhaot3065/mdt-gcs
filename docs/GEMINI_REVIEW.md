@@ -303,6 +303,7 @@ Renderer: useMissionStore.uploadMission()  [Promise — awaits ACK]
 | Mission handshake | `MissionUploadSession` — COUNT→REQUEST→ITEM_INT→ACK |
 | Dev fix | `electron:dev` = `vite` only |
 | Map UI | HUD + map source stacked top-right |
+| Mission UX | Reorder ▲/▼, command dropdown, HOME row, JSON save/load (renderer-only) |
 
 **Build note:** `package.json` has `"type":"module"` — Main/Preload must be **`.cjs`** + `lib.formats: ['cjs']` in `vite.config.ts` so `serialport` native bindings and `__dirname` work.
 
@@ -315,21 +316,23 @@ Renderer: useMissionStore.uploadMission()  [Promise — awaits ACK]
 | Dual link + router + dedup + TIMESYNC RTT | Geo-fence / rally missions |
 | Command egress + mission upload handshake | Full MAVLink dialect |
 | Map mission editor + MISSION_ITEM_INT Main | GPS_RAW_INT, BATTERY_STATUS |
-| Map HUD (SPD/ALT/HDG/VS + attitude horizon) | Mission reorder / command type UI |
-| H16 + Ethernet connect UI | Persist mission JSON |
-| Vehicle telemetry + commands | SITL integration tests in CI |
+| Map HUD (SPD/ALT/HDG/VS + attitude horizon) | Geo-fence / rally mission types |
+| Mission UX: reorder, MAV_CMD select, HOME row | Mission download from autopilot |
+| Mission JSON export/import (`MissionFileDocument`) | SITL integration tests in CI |
+| H16 + Ethernet connect UI | |
+| Vehicle telemetry + commands | |
 
 ---
 
 ## 9. Suggested next prompts for Gemini
 
-**A. Mission UX polish (priority)**
+**A. Extend telemetry (priority)**
 
-> Reorder waypoints, command dropdown (TAKEOFF/LAND/RTL), HOME wp, save/load mission JSON.
+> Add GPS_RAW_INT, BATTERY_STATUS to `mavlink-parser.ts`; extend `shared/types/vehicle.ts` first; surface in `VehicleMonitorPanel`.
 
-**B. Extend telemetry**
+**B. Mission download / advanced types**
 
-> Add GPS_RAW_INT, BATTERY_STATUS to `mavlink-parser.ts`; extend `shared/types/vehicle.ts` first.
+> MISSION_REQUEST_LIST from autopilot; geo-fence / rally via `MAV_MISSION_TYPE`.
 
 ---
 
@@ -371,10 +374,10 @@ IPC out:
 - datalink:mission:upload → GcsMissionPayload → Promise<GcsCommandResult>
   (MISSION_COUNT → MISSION_ITEM_INT* → MISSION_ACK handshake)
 
-Renderer: mission editor on map + MissionListPanel; HUD SPD/ALT/HDG/VS
+Renderer: mission editor on map + MissionListPanel (reorder, MAV_CMD select, JSON save/load); HUD SPD/ALT/HDG/VS
 
-Done: TIMESYNC RTT, mission upload handshake, map editor, overlay layout fix.
-Next: mission UX polish, telemetry extensions.
+Done: TIMESYNC RTT, mission upload handshake, map editor, overlay layout fix, mission UX polish.
+Next: GPS_RAW_INT / BATTERY_STATUS telemetry, mission download, geo-fence.
 
 Paste: docs/GEMINI_REVIEW.md + docs/ARCHITECTURE.md
 ```

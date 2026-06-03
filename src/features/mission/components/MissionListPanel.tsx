@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useDatalinkFeatureStore } from '@/features/datalink/store/use-datalink-store';
+import { useVehicleStore } from '@/features/vehicle/store/use-vehicle-store';
+import { MISSION_CMD_OPTIONS } from '@shared/types/mission';
 import { useMissionStore } from '../store/use-mission-store';
-import { mavCommandLabel } from '../utils/command-label';
+import { downloadMissionJson, readMissionJsonFile } from '../utils/mission-file-io';
 import { MissionUploadConfirmModal } from './MissionUploadConfirmModal';
 
 const LINK_LABEL: Record<string, string> = {
@@ -17,11 +19,19 @@ export function MissionListPanel() {
   const toggleEditMode = useMissionStore((s) => s.toggleEditMode);
   const updateWaypoint = useMissionStore((s) => s.updateWaypoint);
   const removeWaypoint = useMissionStore((s) => s.removeWaypoint);
+  const reorderWaypoint = useMissionStore((s) => s.reorderWaypoint);
+  const setWaypointCommand = useMissionStore((s) => s.setWaypointCommand);
   const clearWaypoints = useMissionStore((s) => s.clearWaypoints);
+  const importWaypoints = useMissionStore((s) => s.importWaypoints);
   const uploadMission = useMissionStore((s) => s.uploadMission);
   const activeLinkId = useDatalinkFeatureStore((s) => s.router.activeLinkId);
+  const vehicleConnected = useVehicleStore((s) => s.vehicle.connected);
+  const homeLat = useVehicleStore((s) => s.vehicle.position.lat);
+  const homeLon = useVehicleStore((s) => s.vehicle.position.lon);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [confirmUpload, setConfirmUpload] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
 
   const activeRouteLabel = activeLinkId ? LINK_LABEL[activeLinkId] ?? activeLinkId : null;
   const canUpload = waypoints.length > 0 && !uploadBusy && !!activeLinkId;
@@ -36,6 +46,34 @@ export function MissionListPanel() {
     setConfirmUpload(false);
     await uploadMission();
   };
+
+  const handleSaveMission = () => {
+    if (waypoints.length === 0) return;
+    downloadMissionJson(waypoints);
+  };
+
+  const handleLoadClick = () => {
+    setFileError(null);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const items = await readMissionJsonFile(file);
+      importWaypoints(items);
+      setFileError(null);
+    } catch (err) {
+      setFileError(err instanceof Error ? err.message : 'Failed to load mission file');
+    }
+  };
+
+  const homeLabel =
+    vehicleConnected && homeLat != null && homeLon != null
+      ? `${homeLat.toFixed(6)}, ${homeLon.toFixed(6)}`
+      : 'Set HOME on autopilot · telemetry pending';
 
   return (
     <>
@@ -66,32 +104,111 @@ export function MissionListPanel() {
           </button>
         </div>
 
-        {waypoints.length === 0 ? (
-          <p className="rounded-md border border-dashed border-slate-700 bg-slate-900/50 px-3 py-4 text-center text-xs text-slate-500">
-            Edit 모드를 켜고 지도를 클릭하여 웨이포인트를 추가하세요.
+        <div className="mb-3 flex gap-2">
+          <button
+            type="button"
+            disabled={waypoints.length === 0}
+            onClick={handleSaveMission}
+            className="flex-1 rounded-md border border-slate-600 bg-slate-800 px-2 py-1.5 text-[10px] font-semibold text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Save Mission
+          </button>
+          <button
+            type="button"
+            onClick={handleLoadClick}
+            className="flex-1 rounded-md border border-slate-600 bg-slate-800 px-2 py-1.5 text-[10px] font-semibold text-slate-200 hover:bg-slate-700"
+          >
+            Load Mission
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => void handleFileChange(e)}
+          />
+        </div>
+
+        {fileError && (
+          <p className="mb-2 text-[10px] text-red-400" role="alert">
+            {fileError}
           </p>
-        ) : (
-          <div className="max-h-52 overflow-y-auto rounded-md border border-slate-700">
-            <table className="w-full text-left text-xs">
-              <thead className="sticky top-0 bg-slate-900 text-[10px] uppercase tracking-wider text-slate-500">
+        )}
+
+        <div className="max-h-56 overflow-y-auto rounded-md border border-slate-700">
+          <table className="w-full text-left text-xs">
+            <thead className="sticky top-0 z-[1] bg-slate-900 text-[10px] uppercase tracking-wider text-slate-500">
+              <tr>
+                <th className="px-1 py-1.5 font-semibold" aria-label="Reorder" />
+                <th className="px-2 py-1.5 font-semibold">Seq</th>
+                <th className="px-2 py-1.5 font-semibold">Cmd</th>
+                <th className="px-2 py-1.5 font-semibold">Alt (m)</th>
+                <th className="px-2 py-1.5 font-semibold" aria-label="Actions" />
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-emerald-900/50 bg-emerald-950/20">
+                <td className="px-1 py-1.5 text-center text-slate-600">—</td>
+                <td className="px-2 py-1.5 font-mono font-bold text-emerald-400">HOME</td>
+                <td className="px-2 py-1.5 text-[10px] text-emerald-300/90" colSpan={3}>
+                  ArduPilot home reference · {homeLabel}
+                </td>
+              </tr>
+
+              {waypoints.length === 0 ? (
                 <tr>
-                  <th className="px-2 py-1.5 font-semibold">Seq</th>
-                  <th className="px-2 py-1.5 font-semibold">Cmd</th>
-                  <th className="px-2 py-1.5 font-semibold">Alt (m)</th>
-                  <th className="px-2 py-1.5 font-semibold" aria-label="Actions" />
+                  <td colSpan={5} className="px-3 py-4 text-center text-slate-500">
+                    Edit ON → 지도 클릭으로 웨이포인트 추가
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {waypoints.map((wp) => (
+              ) : (
+                waypoints.map((wp, index) => (
                   <tr
                     key={wp.seq}
                     className="border-t border-slate-800 hover:bg-slate-900/80"
                   >
+                    <td className="px-1 py-1">
+                      <div className="flex flex-col gap-0.5">
+                        <button
+                          type="button"
+                          disabled={index === 0}
+                          onClick={() => reorderWaypoint(index, index - 1)}
+                          className="rounded border border-slate-700 bg-slate-900 px-1 text-[10px] leading-none text-slate-400 hover:bg-slate-800 disabled:opacity-30"
+                          aria-label={`Move waypoint ${wp.seq + 1} up`}
+                          title="Move up"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          disabled={index === waypoints.length - 1}
+                          onClick={() => reorderWaypoint(index, index + 1)}
+                          className="rounded border border-slate-700 bg-slate-900 px-1 text-[10px] leading-none text-slate-400 hover:bg-slate-800 disabled:opacity-30"
+                          aria-label={`Move waypoint ${wp.seq + 1} down`}
+                          title="Move down"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                    </td>
                     <td className="px-2 py-1.5 font-mono font-semibold text-sky-300">
                       {wp.seq + 1}
                     </td>
-                    <td className="px-2 py-1.5 font-mono text-slate-300">
-                      {mavCommandLabel(wp.command)}
+                    <td className="px-2 py-1.5">
+                      <select
+                        value={wp.command}
+                        onChange={(e) =>
+                          setWaypointCommand(wp.seq, Number.parseInt(e.target.value, 10))
+                        }
+                        className="w-full max-w-[7rem] rounded border border-slate-600 bg-slate-950 px-1 py-0.5 text-[10px] font-semibold text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        aria-label={`Command for waypoint ${wp.seq + 1}`}
+                      >
+                        {MISSION_CMD_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td className="px-2 py-1.5">
                       <input
@@ -114,11 +231,11 @@ export function MissionListPanel() {
                       </button>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
         <div className="mt-3 flex gap-2">
           <button

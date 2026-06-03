@@ -18,8 +18,11 @@ interface MissionStore {
   addWaypoint: (lat: number, lon: number, alt?: number) => void;
   updateWaypoint: (seq: number, patch: Partial<Omit<WaypointItem, 'seq'>>) => void;
   removeWaypoint: (seq: number) => void;
+  reorderWaypoint: (fromIndex: number, toIndex: number) => void;
+  setWaypointCommand: (seq: number, command: number) => void;
   clearWaypoints: () => void;
   setWaypoints: (items: WaypointItem[]) => void;
+  importWaypoints: (items: WaypointItem[]) => void;
   uploadMission: (
     options?: Pick<GcsMissionPayload, 'targetSystem' | 'targetComponent' | 'missionType'>,
   ) => Promise<GcsCommandResult>;
@@ -57,9 +60,32 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
     }));
   },
 
-  clearWaypoints: () => set({ waypoints: [] }),
+  reorderWaypoint: (fromIndex, toIndex) => {
+    set((state) => {
+      const items = [...state.waypoints];
+      if (fromIndex < 0 || fromIndex >= items.length) return state;
+      if (toIndex < 0 || toIndex >= items.length) return state;
+      if (fromIndex === toIndex) return state;
+      const [moved] = items.splice(fromIndex, 1);
+      items.splice(toIndex, 0, moved);
+      return { waypoints: reindexWaypointItems(items) };
+    });
+  },
+
+  setWaypointCommand: (seq, command) => {
+    set((state) => ({
+      waypoints: state.waypoints.map((wp) =>
+        wp.seq === seq ? { ...wp, command } : wp,
+      ),
+    }));
+  },
+
+  clearWaypoints: () => set({ waypoints: [], lastUploadResult: null }),
 
   setWaypoints: (items) => set({ waypoints: reindexWaypointItems(items) }),
+
+  importWaypoints: (items) =>
+    set({ waypoints: reindexWaypointItems(items), lastUploadResult: null }),
 
   uploadMission: async (options) => {
     const { waypoints } = get();

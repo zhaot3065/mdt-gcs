@@ -59,6 +59,7 @@ MDT_GCS/
 │   │   └── components/MapDisplay.tsx, MapHudOverlay.tsx
 │   ├── features/mission/
 │   │   ├── store/use-mission-store.ts
+│   │   ├── utils/mission-file-io.ts   # JSON export/import (renderer-only)
 │   │   └── components/MissionListPanel.tsx, MissionUploadConfirmModal.tsx
 │   ├── stores/
 │   │   └── datalink-store.ts    # Re-export shim → features/datalink
@@ -182,7 +183,9 @@ Main: `mission-egress.ts` — `MissionUploadSession` state machine:
 4. `MISSION_ACK` type 0 → success; timeout 5s → `MISSION_UPLOAD_TIMEOUT`
 5. Link teardown → `abortMissionUpload()`
 
-Renderer: `MissionListPanel`, `MissionMapLayers`, `MapHudOverlay` + `MapLayerToggle` in stacked `map-overlay-top-right`.
+Renderer: `MissionListPanel` (▲/▼ reorder, `MISSION_CMD_OPTIONS` dropdown, HOME telemetry row, Save/Load JSON via `mission-file-io.ts`), `MissionMapLayers`, `MapHudOverlay` + `MapLayerToggle` in stacked `map-overlay-top-right`.
+
+Mission file format: `MissionFileDocument` in `shared/types/mission.ts` — `{ version: 1, exportedAt, waypoints[] }`; no IPC (Blob download / FileReader import).
 
 ### H16 serial connect
 
