@@ -59,6 +59,20 @@ export interface WaypointItem {
   param4: number;
 }
 
+/** Renderer → Main invoke payload for `datalink:mission:download` */
+export interface GcsMissionDownloadPayload {
+  targetSystem?: number;
+  targetComponent?: number;
+  missionType?: number;
+}
+
+/** Main → Renderer result for `datalink:mission:download` */
+export interface GcsMissionDownloadResult {
+  ok: boolean;
+  waypoints?: WaypointItem[];
+  error?: string;
+}
+
 /** Renderer → Main invoke payload for `datalink:mission:upload` */
 export interface GcsMissionPayload {
   items: WaypointItem[];

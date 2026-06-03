@@ -4,12 +4,16 @@ import { packMavlinkV2 } from './mavlink-pack';
 
 export const MSG_ID_MISSION_ITEM_INT = 38;
 export const MSG_ID_MISSION_REQUEST = 40;
+export const MSG_ID_MISSION_REQUEST_LIST = 43;
 export const MSG_ID_MISSION_COUNT = 44;
 export const MSG_ID_MISSION_ACK = 47;
 export const MSG_ID_MISSION_REQUEST_INT = 51;
 
 const CRC_EXTRA_MISSION_ITEM_INT = 38;
 const CRC_EXTRA_MISSION_COUNT = 221;
+const CRC_EXTRA_MISSION_REQUEST_LIST = 132;
+const CRC_EXTRA_MISSION_REQUEST_INT = 196;
+const CRC_EXTRA_MISSION_ACK = 153;
 
 /** MAV_FRAME_GLOBAL_RELATIVE_ALT — typical for ArduPilot copter waypoints */
 export const MAV_FRAME_GLOBAL_RELATIVE_ALT = 3;
@@ -32,6 +36,26 @@ export interface MissionItemIntParams {
   frame?: number;
   current?: number;
   autocontinue?: number;
+}
+
+export interface MissionRequestListParams {
+  targetSystem: number;
+  targetComponent: number;
+  missionType?: number;
+}
+
+export interface MissionRequestIntParams {
+  targetSystem: number;
+  targetComponent: number;
+  seq: number;
+  missionType?: number;
+}
+
+export interface MissionAckParams {
+  targetSystem: number;
+  targetComponent: number;
+  type?: number;
+  missionType?: number;
 }
 
 export function encodeMissionCount(params: MissionCountParams): Buffer {
@@ -67,6 +91,32 @@ export function encodeMissionItemInt(params: MissionItemIntParams): Buffer {
   return packMavlinkV2(MSG_ID_MISSION_ITEM_INT, CRC_EXTRA_MISSION_ITEM_INT, payload);
 }
 
+export function encodeMissionRequestList(params: MissionRequestListParams): Buffer {
+  const payload = Buffer.alloc(3);
+  payload.writeUInt8(params.targetSystem, 0);
+  payload.writeUInt8(params.targetComponent, 1);
+  payload.writeUInt8(params.missionType ?? MAV_MISSION_TYPE.MISSION, 2);
+  return packMavlinkV2(MSG_ID_MISSION_REQUEST_LIST, CRC_EXTRA_MISSION_REQUEST_LIST, payload);
+}
+
+export function encodeMissionRequestInt(params: MissionRequestIntParams): Buffer {
+  const payload = Buffer.alloc(5);
+  payload.writeUInt8(params.targetSystem, 0);
+  payload.writeUInt8(params.targetComponent, 1);
+  payload.writeUInt16LE(params.seq, 2);
+  payload.writeUInt8(params.missionType ?? MAV_MISSION_TYPE.MISSION, 4);
+  return packMavlinkV2(MSG_ID_MISSION_REQUEST_INT, CRC_EXTRA_MISSION_REQUEST_INT, payload);
+}
+
+export function encodeMissionAck(params: MissionAckParams): Buffer {
+  const payload = Buffer.alloc(4);
+  payload.writeUInt8(params.targetSystem, 0);
+  payload.writeUInt8(params.targetComponent, 1);
+  payload.writeUInt8(params.type ?? MAV_MISSION_ACCEPTED, 2);
+  payload.writeUInt8(params.missionType ?? MAV_MISSION_TYPE.MISSION, 3);
+  return packMavlinkV2(MSG_ID_MISSION_ACK, CRC_EXTRA_MISSION_ACK, payload);
+}
+
 export function extractMavlinkPayload(raw: Buffer): Buffer | null {
   if (raw.length < 8) return null;
   const stx = raw[0];
@@ -81,6 +131,34 @@ export function extractMavlinkPayload(raw: Buffer): Buffer | null {
     return raw.subarray(12, 12 + len);
   }
   return null;
+}
+
+/** MISSION_COUNT (#44) — autopilot reports item count to GCS */
+export function parseMissionCount(payload: Buffer): { count: number; missionType: number } | null {
+  if (payload.length < 5) return null;
+  return {
+    count: payload.readUInt16LE(0),
+    missionType: payload.readUInt8(4),
+  };
+}
+
+/** MISSION_ITEM_INT (#38) — lat/lon int32 degrees × 1e7 → float degrees */
+export function parseMissionItemInt(payload: Buffer): WaypointItem | null {
+  if (payload.length < 38) return null;
+  const lat = payload.readInt32LE(16) / 1e7;
+  const lon = payload.readInt32LE(20) / 1e7;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return {
+    param1: payload.readFloatLE(0),
+    param2: payload.readFloatLE(4),
+    param3: payload.readFloatLE(8),
+    param4: payload.readFloatLE(12),
+    lat,
+    lon,
+    alt: payload.readFloatLE(24),
+    seq: payload.readUInt16LE(28),
+    command: payload.readUInt16LE(30),
+  };
 }
 
 /** MISSION_REQUEST (#40) — autopilot requests seq from GCS */

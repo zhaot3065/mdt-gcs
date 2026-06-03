@@ -31,7 +31,11 @@ import {
   bindMissionUploadToRouter,
   uploadMissionOnActiveLink,
 } from './mission-egress';
-import type { GcsMissionPayload } from '../../shared/types/mission';
+import {
+  abortMissionDownload,
+  downloadMissionOnActiveLink,
+} from './mission-download';
+import type { GcsMissionDownloadPayload, GcsMissionPayload } from '../../shared/types/mission';
 
 
 
@@ -328,6 +332,10 @@ export class ConnectionManager {
     return uploadMissionOnActiveLink(this.egressContext(), payload);
   }
 
+  downloadMission(payload?: GcsMissionDownloadPayload) {
+    return downloadMissionOnActiveLink(this.egressContext(), payload ?? {});
+  }
+
   private egressContext(): Parameters<typeof sendCommandOnActiveLink>[0] {
     return {
       router: this.router,
@@ -391,6 +399,7 @@ export class ConnectionManager {
     link.endpoint = undefined;
     this.timesync.resetLink(link.id);
     abortMissionUpload(`Link "${link.id}" disconnected during mission upload.`);
+    abortMissionDownload(`Link "${link.id}" disconnected during mission download.`);
   }
 
   private runTimesyncPings(): void {

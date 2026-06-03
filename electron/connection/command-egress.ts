@@ -30,12 +30,12 @@ export function sendCommandOnActiveLink(
 }
 
 /**
- * Shared active-link egress guard — reused by commands and mission upload.
+ * Shared active-link egress guard — reused by commands and mission handshake.
  */
 export function sendFrameOnActiveLink(
   ctx: CommandEgressContext,
   frame: Buffer,
-  command: GcsCommandRequest['command'],
+  command: GcsCommandRequest['command'] | 'mission_download',
   extra: Partial<GcsCommandResult> = {},
 ): GcsCommandResult {
   const links = ctx.getLinks();
@@ -76,7 +76,7 @@ export function sendFrameOnActiveLink(
     transport.send(frame);
     return {
       ok: true,
-      command,
+      command: command as GcsCommandRequest['command'],
       activeLinkId,
       bytesSent: frame.length,
       ...extra,
@@ -88,9 +88,9 @@ export function sendFrameOnActiveLink(
 }
 
 function fail(
-  command: GcsCommandRequest['command'],
+  command: GcsCommandRequest['command'] | 'mission_download',
   errorCode: NonNullable<GcsCommandResult['errorCode']>,
   error: string,
 ): GcsCommandResult {
-  return { ok: false, command, errorCode, error };
+  return { ok: false, command: command as GcsCommandRequest['command'], errorCode, error };
 }

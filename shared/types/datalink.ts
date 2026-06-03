@@ -170,8 +170,10 @@ export const IPC_CHANNELS = {
   LIST_SERIAL_PORTS: 'datalink:serial:list',
   /** Renderer → Main: egress on router active link only */
   SEND_COMMAND: 'datalink:send-command',
-  /** Renderer → Main: mission upload (MISSION_COUNT stub; active link only) */
+  /** Renderer → Main: mission upload (active link only) */
   MISSION_UPLOAD: 'datalink:mission:upload',
+  /** Renderer → Main: mission download from autopilot (active link only) */
+  MISSION_DOWNLOAD: 'datalink:mission:download',
 } as const;
 
 /** Stale packet threshold aligned with link-quality.ts */

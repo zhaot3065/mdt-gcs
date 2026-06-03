@@ -15,7 +15,9 @@ export function MissionListPanel() {
   const waypoints = useMissionStore((s) => s.waypoints);
   const isEditMode = useMissionStore((s) => s.isEditMode);
   const uploadBusy = useMissionStore((s) => s.uploadBusy);
+  const downloadBusy = useMissionStore((s) => s.downloadBusy);
   const lastUploadResult = useMissionStore((s) => s.lastUploadResult);
+  const lastDownloadResult = useMissionStore((s) => s.lastDownloadResult);
   const toggleEditMode = useMissionStore((s) => s.toggleEditMode);
   const updateWaypoint = useMissionStore((s) => s.updateWaypoint);
   const removeWaypoint = useMissionStore((s) => s.removeWaypoint);
@@ -24,6 +26,7 @@ export function MissionListPanel() {
   const clearWaypoints = useMissionStore((s) => s.clearWaypoints);
   const importWaypoints = useMissionStore((s) => s.importWaypoints);
   const uploadMission = useMissionStore((s) => s.uploadMission);
+  const downloadMission = useMissionStore((s) => s.downloadMission);
   const activeLinkId = useDatalinkFeatureStore((s) => s.router.activeLinkId);
   const vehicleConnected = useVehicleStore((s) => s.vehicle.connected);
   const homeLat = useVehicleStore((s) => s.vehicle.position.lat);
@@ -34,7 +37,8 @@ export function MissionListPanel() {
   const [fileError, setFileError] = useState<string | null>(null);
 
   const activeRouteLabel = activeLinkId ? LINK_LABEL[activeLinkId] ?? activeLinkId : null;
-  const canUpload = waypoints.length > 0 && !uploadBusy && !!activeLinkId;
+  const canUpload = waypoints.length > 0 && !uploadBusy && !downloadBusy && !!activeLinkId;
+  const canDownload = !uploadBusy && !downloadBusy && !!activeLinkId && vehicleConnected;
 
   const handleAltChange = (seq: number, raw: string) => {
     const parsed = Number.parseFloat(raw);
@@ -45,6 +49,16 @@ export function MissionListPanel() {
   const handleConfirmUpload = async () => {
     setConfirmUpload(false);
     await uploadMission();
+  };
+
+  const handleDownloadMission = async () => {
+    if (
+      waypoints.length > 0 &&
+      !window.confirm('기체 미션을 다운로드하면 현재 편집 중인 웨이포인트가 덮어씌워집니다. 계속하시겠습니까?')
+    ) {
+      return;
+    }
+    await downloadMission();
   };
 
   const handleSaveMission = () => {
@@ -237,30 +251,56 @@ export function MissionListPanel() {
           </table>
         </div>
 
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={waypoints.length === 0 || uploadBusy}
+            disabled={waypoints.length === 0 || uploadBusy || downloadBusy}
             onClick={() => {
               if (window.confirm('모든 웨이포인트를 삭제하시겠습니까?')) clearWaypoints();
             }}
-            className="flex-1 rounded-md border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex-1 min-w-[7rem] rounded-md border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Clear All
           </button>
           <button
             type="button"
+            disabled={!canDownload}
+            onClick={() => void handleDownloadMission()}
+            className="flex-1 min-w-[7rem] rounded-md border border-violet-500/60 bg-violet-950 px-3 py-2 text-xs font-bold text-violet-100 ring-1 ring-violet-500/40 hover:bg-violet-900 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {downloadBusy ? 'Downloading…' : 'Download Mission'}
+          </button>
+          <button
+            type="button"
             disabled={!canUpload}
             onClick={() => setConfirmUpload(true)}
-            className="flex-1 rounded-md bg-sky-600 px-3 py-2 text-xs font-bold text-white ring-1 ring-sky-400 hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex-1 min-w-[7rem] rounded-md bg-sky-600 px-3 py-2 text-xs font-bold text-white ring-1 ring-sky-400 hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Upload Mission
           </button>
         </div>
 
-        {!activeLinkId && waypoints.length > 0 && (
+        {!activeLinkId && (waypoints.length > 0 || downloadBusy) && (
           <p className="mt-2 text-[10px] text-amber-500/90">
-            활성 datalink route가 없으면 업로드할 수 없습니다.
+            활성 datalink route가 없으면 미션 송수신을 할 수 없습니다.
+          </p>
+        )}
+
+        {!vehicleConnected && activeLinkId && (
+          <p className="mt-2 text-[10px] text-amber-500/90">
+            기체 HEARTBEAT 수신 후 다운로드할 수 있습니다.
+          </p>
+        )}
+
+        {lastDownloadResult && (
+          <p
+            className={`mt-2 text-xs font-mono ${
+              lastDownloadResult.ok ? 'text-emerald-400' : 'text-red-400'
+            }`}
+          >
+            {lastDownloadResult.ok
+              ? `DOWNLOAD OK · ${lastDownloadResult.waypoints?.length ?? 0} wp from autopilot`
+              : `DOWNLOAD FAIL · ${lastDownloadResult.error}`}
           </p>
         )}
 

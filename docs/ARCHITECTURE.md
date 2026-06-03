@@ -81,6 +81,8 @@ electron/connection/timesync-rtt.ts
 electron/connection/mavlink-pack.ts
 electron/connection/mavlink-mission.ts
 electron/connection/mission-egress.ts
+electron/connection/mission-download.ts
+electron/connection/mission-transaction-lock.ts
 src/features/mission/components/MissionListPanel.tsx
 src/features/map/components/MissionMapLayers.tsx
 ```
@@ -180,6 +182,7 @@ Renderer: Leaflet + `useVehicleStore` marker + `useMapStore` tile mode toggle.
 |---------|-----------|---------|
 | `datalink:send-command` | Renderer → Main (invoke) | `GcsCommandRequest` → `GcsCommandResult` |
 | `datalink:mission:upload` | Renderer → Main (invoke) | `GcsMissionPayload` → `GcsCommandResult` |
+| `datalink:mission:download` | Renderer → Main (invoke) | `GcsMissionDownloadPayload?` → `GcsMissionDownloadResult` |
 
 Main encodes MAVLink v2 `COMMAND_LONG` (arm/disarm/rtl/set_mode via `MAV_CMD_DO_SET_MODE`) and sends **only** on `MavlinkRouter.activeLinkId` transport. Blocks if no active link or link not live.
 
@@ -201,6 +204,20 @@ Main: `mission-egress.ts` — `MissionUploadSession` state machine:
 Renderer: `MissionListPanel` (▲/▼ reorder, `MISSION_CMD_OPTIONS` dropdown, HOME telemetry row, Save/Load JSON via `mission-file-io.ts`), `MissionMapLayers`, `MapHudOverlay` + `MapLayerToggle` in stacked `map-overlay-top-right`.
 
 Mission file format: `MissionFileDocument` in `shared/types/mission.ts` — `{ version: 1, exportedAt, waypoints[] }`; no IPC (Blob download / FileReader import).
+
+### Mission download (active link egress + router frame handshake)
+
+Invoke `datalink:mission:download` → **async** `Promise<GcsMissionDownloadResult>`.
+
+Main: `mission-download.ts` — `MissionDownloadSession` state machine:
+1. `encodeMissionRequestList()` (#43) → `sendFrameOnActiveLink`
+2. Router listens for #44 `MISSION_COUNT` → `totalCount`
+3. `encodeMissionRequestInt()` (#51) per seq; router #38 `MISSION_ITEM_INT` → `parseMissionItemInt` (lat/lon ÷ 1e7)
+4. All items received → GCS sends #47 `MISSION_ACK` type 0 → resolve `{ ok, waypoints }`
+5. Step timeout 5s; link teardown → `abortMissionDownload()`
+6. Upload/download mutex: `mission-transaction-lock.ts`
+
+Preload: `window.gcs.mission.download(payload?)`. Renderer: `MissionListPanel` **Download Mission** button → `useMissionStore.downloadMission()` replaces `waypoints` → `MissionMapLayers` auto-refresh.
 
 ### H16 serial connect
 

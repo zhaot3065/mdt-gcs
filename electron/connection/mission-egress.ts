@@ -17,6 +17,12 @@ import {
   sendFrameOnActiveLink,
 } from './command-egress';
 import type { ForwardedMavlinkFrame, MavlinkRouter } from './mavlink-router';
+import { handleMissionDownloadFrame, isMissionDownloadInProgress } from './mission-download';
+import {
+  acquireMissionLock,
+  getMissionLockHolder,
+  releaseMissionLock,
+} from './mission-transaction-lock';
 
 /** Per-step handshake timeout (ms) */
 const HANDSHAKE_STEP_TIMEOUT_MS = 5000;
@@ -53,6 +59,7 @@ function finishSession(result: GcsCommandResult): void {
   }
   const { resolve } = activeSession;
   activeSession = null;
+  releaseMissionLock('upload');
   resolve(result);
 }
 
@@ -138,10 +145,13 @@ function handleMissionAck(session: MissionUploadSession, ackType: number): void 
   );
 }
 
-function handleRouterFrame({ frame }: ForwardedMavlinkFrame): void {
+function handleRouterFrame(evt: ForwardedMavlinkFrame): void {
+  handleMissionDownloadFrame(evt);
+
   const session = activeSession;
   if (!session) return;
 
+  const { frame } = evt;
   const { sysid, compid, msgId } = frame.header;
   if (!matchesSessionVehicle(session, sysid, compid)) return;
 
@@ -194,10 +204,22 @@ export function uploadMissionOnActiveLink(
     );
   }
 
+  if (isMissionDownloadInProgress() || getMissionLockHolder() === 'download') {
+    return Promise.resolve(
+      missionFail('SEND_FAILED', 'Mission download in progress — try again later.'),
+    );
+  }
+
   const items = payload.items ?? [];
   if (items.length === 0) {
     return Promise.resolve(
       missionFail('ENCODE_FAILED', 'Mission has no waypoints to upload.'),
+    );
+  }
+
+  if (!acquireMissionLock('upload')) {
+    return Promise.resolve(
+      missionFail('SEND_FAILED', 'Another mission transaction is in progress.'),
     );
   }
 
@@ -215,11 +237,13 @@ export function uploadMissionOnActiveLink(
   return new Promise((resolve) => {
     const sendResult = sendFrameOnActiveLink(ctx, countFrame, 'mission_upload');
     if (!sendResult.ok) {
+      releaseMissionLock('upload');
       resolve(sendResult);
       return;
     }
 
     if (!sendResult.activeLinkId) {
+      releaseMissionLock('upload');
       resolve(missionFail('NO_ACTIVE_LINK', 'No active route after MISSION_COUNT send.'));
       return;
     }

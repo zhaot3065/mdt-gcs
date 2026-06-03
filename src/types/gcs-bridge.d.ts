@@ -7,7 +7,7 @@ import type {
   SerialPortInfo,
 } from '@shared/types/datalink';
 import type { VehicleState } from '@shared/types/vehicle';
-import type { GcsMissionPayload } from '@shared/types/mission';
+import type { GcsMissionDownloadPayload, GcsMissionDownloadResult, GcsMissionPayload } from '@shared/types/mission';
 
 export interface GcsBridgeApi {
   datalink: {
@@ -25,6 +25,7 @@ export interface GcsBridgeApi {
   };
   mission: {
     upload: (payload: GcsMissionPayload) => Promise<GcsCommandResult>;
+    download: (payload?: GcsMissionDownloadPayload) => Promise<GcsMissionDownloadResult>;
   };
 }
 

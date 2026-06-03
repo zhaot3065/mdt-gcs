@@ -106,7 +106,9 @@ interface GcsCommandResult {
 }
 ```
 
-**Mission egress invoke:** `datalink:mission:upload` → `GcsMissionPayload` → `GcsCommandResult` (`command: 'mission_upload'`)
+**Mission egress invoke:**
+- `datalink:mission:upload` → `GcsMissionPayload` → `GcsCommandResult` (`command: 'mission_upload'`)
+- `datalink:mission:download` → `GcsMissionDownloadPayload?` → `GcsMissionDownloadResult` (`{ ok, waypoints?, error? }`)
 
 ```typescript
 // shared/types/mission.ts
@@ -127,11 +129,21 @@ interface GcsMissionPayload {
   targetComponent?: number;   // default 1
   missionType?: number;       // default 0 (MAV_MISSION_TYPE_MISSION)
 }
+interface GcsMissionDownloadPayload {
+  targetSystem?: number;
+  targetComponent?: number;
+  missionType?: number;
+}
+interface GcsMissionDownloadResult {
+  ok: boolean;
+  waypoints?: WaypointItem[];
+  error?: string;
+}
 ```
 
-Preload: `window.gcs.mission.upload(payload)`.
+Preload: `window.gcs.mission.upload(payload)`, `window.gcs.mission.download(payload?)`.
 
-**Main today:** encodes **MISSION_COUNT (#44)** only — announces `items.length`. Full `MISSION_REQUEST` / `MISSION_ITEM_INT` handshake is **next phase**.
+**Main:** upload — `MissionUploadSession` (COUNT→REQUEST→ITEM_INT→ACK). Download — `MissionDownloadSession` (REQUEST_LIST→COUNT→REQUEST_INT→ITEM_INT*→ACK). Mutual exclusion via `mission-transaction-lock.ts`.
 
 **MAVLink encoding (Main):**
 | command | MAV_CMD | params |
@@ -269,6 +281,24 @@ Renderer: useMissionStore.uploadMission()  [Promise — awaits ACK]
   → egress always on active link; ingress ACK/REQUEST on any deduped frame from vehicle
 ```
 
+### Pipeline E — Mission download (full handshake)
+
+```
+Renderer: useMissionStore.downloadMission()  [Promise]
+  → window.gcs.mission.download(GcsMissionDownloadPayload?)
+  → ipc invoke datalink:mission:download
+  → ConnectionManager.downloadMission (async)
+  → mission-download.ts MissionDownloadSession:
+      1. sendFrameOnActiveLink → MISSION_REQUEST_LIST (#43)
+      2. router 'frame' → MISSION_COUNT (#44) → totalCount
+      3. sendFrameOnActiveLink → MISSION_REQUEST_INT (#51) per seq 0..n-1
+      4. router 'frame' → MISSION_ITEM_INT (#38); lat/lon ÷ 1e7 → receivedItems[]
+      5. sendFrameOnActiveLink → MISSION_ACK (#47) type=0 → resolve { ok, waypoints }
+      6. Step timeout 5s → MISSION_DOWNLOAD_TIMEOUT
+  → upload/download mutex via mission-transaction-lock.ts
+  → success: useMissionStore replaces waypoints → MissionMapLayers refresh
+```
+
 **Map mission editor:**
 - `useMissionStore.isEditMode`, `MissionMapLayers`, `MissionListPanel`, upload confirm modal
 - Map overlay: `map-overlay-top-right` stacks Map source + HUD (no overlap)
@@ -282,7 +312,7 @@ Renderer: useMissionStore.uploadMission()  [Promise — awaits ACK]
 | Datalink | `useDatalinkFeatureStore` | `gcs.datalink.onPayload` |
 | Vehicle | `useVehicleStore` | `gcs.vehicle.onState` |
 | Map | `useMapStore` | (local — tile mode) |
-| Mission | `useMissionStore` | `gcs.mission.upload` (invoke) |
+| Mission | `useMissionStore` | `gcs.mission.upload`, `gcs.mission.download` (invoke) |
 
 `App.tsx` mounts datalink + vehicle IPC on load.
 
@@ -313,6 +343,7 @@ Renderer: useMissionStore.uploadMission()  [Promise — awaits ACK]
 | Map UI | HUD + map source stacked top-right |
 | Mission UX | Reorder ▲/▼, command dropdown, HOME row, JSON save/load (renderer-only) |
 | Telemetry ext | GPS_RAW_INT #24 + BATTERY_STATUS #147; toolbar GPS/batt badges |
+| Mission download | `MissionDownloadSession` — REQUEST_LIST→COUNT→REQUEST_INT→ITEM_INT→ACK |
 
 **Build note:** `package.json` has `"type":"module"` — Main/Preload must be **`.cjs`** + `lib.formats: ['cjs']` in `vite.config.ts` so `serialport` native bindings and `__dirname` work.
 
@@ -324,10 +355,11 @@ Renderer: useMissionStore.uploadMission()  [Promise — awaits ACK]
 |------|---------|
 | Dual link + router + dedup + TIMESYNC RTT | Geo-fence / rally missions |
 | Command egress + mission upload handshake | Full MAVLink dialect |
-| Map mission editor + MISSION_ITEM_INT Main | Full MAVLink dialect |
+| Map mission editor + MISSION_ITEM_INT Main | |
 | Map HUD (SPD/ALT/HDG/VS + attitude horizon) | Geo-fence / rally mission types |
-| Mission UX: reorder, MAV_CMD select, HOME row | Mission download from autopilot |
+| Mission UX: reorder, MAV_CMD select, HOME row | Geo-fence / rally mission types |
 | Mission JSON export/import (`MissionFileDocument`) | SITL integration tests in CI |
+| Mission download → `useMissionStore` sync + map refresh | Full MAVLink dialect |
 | GPS_RAW_INT + BATTERY_STATUS → `VehicleGps` + battery priority | |
 | Toolbar badges: 🛰 sats + 🔋 %; GPS section in VehicleMonitorPanel | |
 | H16 + Ethernet connect UI | |
@@ -337,9 +369,9 @@ Renderer: useMissionStore.uploadMission()  [Promise — awaits ACK]
 
 ## 9. Suggested next prompts for Gemini
 
-**A. Mission download / advanced types (priority)**
+**A. Geo-fence / rally missions (priority)**
 
-> MISSION_REQUEST_LIST from autopilot; geo-fence / rally via `MAV_MISSION_TYPE`.
+> Extend mission handshake for `MAV_MISSION_TYPE` fence (1) and rally (2); UI type selector.
 
 **B. SITL CI**
 
@@ -383,12 +415,13 @@ IPC in:
 IPC out:
 - datalink:send-command → arm|disarm|rtl|set_mode
 - datalink:mission:upload → GcsMissionPayload → Promise<GcsCommandResult>
-  (MISSION_COUNT → MISSION_ITEM_INT* → MISSION_ACK handshake)
+- datalink:mission:download → GcsMissionDownloadPayload? → Promise<GcsMissionDownloadResult>
 
-Renderer: mission editor + MissionListPanel; HUD; GPS/battery badges in toolbar; VehicleMonitorPanel GPS section
+Renderer: mission editor + MissionListPanel (upload + download); HUD; GPS/battery toolbar badges
 
-Done: TIMESYNC RTT, mission handshake, map editor, mission UX, GPS_RAW_INT + BATTERY_STATUS telemetry.
-Next: mission download, geo-fence/rally, SITL CI.
+Done: dual link router, TIMESYNC RTT, mission upload/download handshake, mission UX,
+  GPS_RAW_INT + BATTERY_STATUS telemetry.
+Next: geo-fence/rally, SITL CI.
 
 Paste: docs/GEMINI_REVIEW.md + docs/ARCHITECTURE.md
 ```

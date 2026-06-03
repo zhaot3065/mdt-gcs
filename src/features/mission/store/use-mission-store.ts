@@ -4,6 +4,8 @@ import {
   createWaypointItem,
   DEFAULT_MISSION_WP_ALT_M,
   reindexWaypointItems,
+  type GcsMissionDownloadPayload,
+  type GcsMissionDownloadResult,
   type GcsMissionPayload,
   type WaypointItem,
 } from '@shared/types/mission';
@@ -12,7 +14,9 @@ interface MissionStore {
   waypoints: WaypointItem[];
   isEditMode: boolean;
   uploadBusy: boolean;
+  downloadBusy: boolean;
   lastUploadResult: GcsCommandResult | null;
+  lastDownloadResult: GcsMissionDownloadResult | null;
   setEditMode: (enabled: boolean) => void;
   toggleEditMode: () => void;
   addWaypoint: (lat: number, lon: number, alt?: number) => void;
@@ -26,13 +30,18 @@ interface MissionStore {
   uploadMission: (
     options?: Pick<GcsMissionPayload, 'targetSystem' | 'targetComponent' | 'missionType'>,
   ) => Promise<GcsCommandResult>;
+  downloadMission: (
+    options?: GcsMissionDownloadPayload,
+  ) => Promise<GcsMissionDownloadResult>;
 }
 
 export const useMissionStore = create<MissionStore>((set, get) => ({
   waypoints: [],
   isEditMode: false,
   uploadBusy: false,
+  downloadBusy: false,
   lastUploadResult: null,
+  lastDownloadResult: null,
 
   setEditMode: (enabled) => set({ isEditMode: enabled }),
   toggleEditMode: () => set((s) => ({ isEditMode: !s.isEditMode })),
@@ -80,12 +89,13 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
     }));
   },
 
-  clearWaypoints: () => set({ waypoints: [], lastUploadResult: null }),
+  clearWaypoints: () =>
+    set({ waypoints: [], lastUploadResult: null, lastDownloadResult: null }),
 
   setWaypoints: (items) => set({ waypoints: reindexWaypointItems(items) }),
 
   importWaypoints: (items) =>
-    set({ waypoints: reindexWaypointItems(items), lastUploadResult: null }),
+    set({ waypoints: reindexWaypointItems(items), lastUploadResult: null, lastDownloadResult: null }),
 
   uploadMission: async (options) => {
     const { waypoints } = get();
@@ -114,6 +124,29 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
       return result;
     } finally {
       set({ uploadBusy: false });
+    }
+  },
+
+  downloadMission: async (options) => {
+    if (!window.gcs?.mission?.download) {
+      const result: GcsMissionDownloadResult = {
+        ok: false,
+        error: 'Electron bridge unavailable (run via electron:dev)',
+      };
+      set({ lastDownloadResult: result });
+      return result;
+    }
+
+    set({ downloadBusy: true, lastDownloadResult: null });
+    try {
+      const result = await window.gcs.mission.download(options);
+      set({ lastDownloadResult: result });
+      if (result.ok && result.waypoints) {
+        set({ waypoints: reindexWaypointItems(result.waypoints) });
+      }
+      return result;
+    } finally {
+      set({ downloadBusy: false });
     }
   },
 }));
