@@ -3,7 +3,7 @@
 > **Repo:** https://github.com/zhaot3065/mdt-gcs  
 > **Branch:** `main`  
 > **Purpose:** Paste this document (or sections) into Gemini when you cannot clone the repo.  
-> **Last updated:** 2026-06-04 — + TIMESYNC RTT + Electron CJS/serialport build fix
+> **Last updated:** 2026-06-04 — + Mission planner foundation (types, MISSION_COUNT stub, Zustand store)
 
 ---
 
@@ -19,7 +19,7 @@
 |-------|--------|
 | Shell | Electron 36 |
 | UI | React 19 + Vite 6 + **Tailwind CSS v4** |
-| State | Zustand — `features/datalink`, `features/vehicle`, `features/map` |
+| State | Zustand — `features/datalink`, `features/vehicle`, `features/map`, `features/mission` |
 | Map | Leaflet + react-leaflet |
 | Serial | `serialport` 13 (Main only) |
 | Protocol | Hand-rolled MAVLink v1/v2 frame parse in Main |
@@ -38,29 +38,33 @@ MDT_GCS/
 ├── shared/types/
 │   ├── datalink.ts               # DatalinkIpcPayload — change first for link IPC
 │   ├── vehicle.ts                # VehicleState — telemetry IPC
+│   ├── mission.ts                # WaypointItem, GcsMissionPayload — mission IPC
 │   └── map.ts                    # Tile URLs, map mode constants
 ├── electron/connection/
 │   ├── connection-manager.ts
 │   ├── mavlink-router.ts         # Dedup + active link + rttSlotProvider
 │   ├── timesync-rtt.ts           # GCS-initiated TIMESYNC #111 → per-link RTT
 │   ├── mavlink-pack.ts           # Shared MAVLink v2 packer (Main egress)
+│   ├── mavlink-mission.ts        # MISSION_COUNT (#44) encoder
+│   ├── mission-egress.ts         # Mission upload stub (active-link guard)
 │   ├── mavlink-parser.ts         # frame → VehicleState
 │   ├── mavlink-command.ts        # COMMAND_LONG encoder
-│   ├── command-egress.ts         # active-link send guard
+│   ├── command-egress.ts         # sendFrameOnActiveLink guard (shared)
 │   ├── mavlink-frame.ts
 │   ├── mavlink-stats.ts
 │   └── udp / tcp / serial transports
 └── src/features/
     ├── datalink/                 # useDatalinkFeatureStore, RouterStatusPanel
     ├── vehicle/                  # useVehicleStore, VehicleMonitorPanel
-    └── map/                      # useMapStore, MapDisplay, gcs-tiles layer
+    ├── map/                      # useMapStore, MapDisplay, MapHudOverlay
+    └── mission/                  # useMissionStore (waypoints; map UI next)
 ```
 
 ```
 electron/protocol/gcs-tiles-protocol.ts  # protocol.handle → userData/maps
 ```
 
-**Preload:** `window.gcs.datalink.*` (incl. `getSerialPorts`, `connectH16`, `disconnectH16`) + `vehicle.onState` + `vehicle.sendCommand`
+**Preload:** `window.gcs.datalink.*` + `vehicle.onState` + `vehicle.sendCommand` + **`mission.upload`**
 
 ---
 
@@ -84,15 +88,50 @@ Preload aliases: `getSerialPorts()` = `serial:list`, `connectH16`, `disconnectH1
 **Egress invoke:** `datalink:send-command` → `GcsCommandRequest` → `GcsCommandResult`
 
 ```typescript
-type GcsCommandType = 'arm' | 'disarm' | 'rtl' | 'set_mode';
+type GcsCommandType = 'arm' | 'disarm' | 'rtl' | 'set_mode' | 'mission_upload';
 interface GcsCommandRequest {
-  command: GcsCommandType;
-  customMode?: number;   // required for set_mode (ArduPilot custom_mode)
+  command: GcsCommandType;  // vehicle panel uses arm|disarm|rtl|set_mode only
+  customMode?: number;
   targetSystem?: number;
   targetComponent?: number;
 }
-interface GcsCommandResult { ok: boolean; command; activeLinkId?; bytesSent?; error?; errorCode?; }
+interface GcsCommandResult {
+  ok: boolean;
+  command: GcsCommandType;
+  activeLinkId?: DatalinkId;
+  bytesSent?: number;
+  missionItemCount?: number;  // set when command === 'mission_upload'
+  error?: string;
+  errorCode?: 'NO_ACTIVE_LINK' | 'LINK_NOT_CONNECTED' | 'LINK_NOT_LIVE' | 'ENCODE_FAILED' | 'SEND_FAILED';
+}
 ```
+
+**Mission egress invoke:** `datalink:mission:upload` → `GcsMissionPayload` → `GcsCommandResult` (`command: 'mission_upload'`)
+
+```typescript
+// shared/types/mission.ts
+interface WaypointItem {
+  seq: number;
+  command: number;   // e.g. MAV_CMD_NAV_WAYPOINT = 16
+  lat: number;
+  lon: number;
+  alt: number;
+  param1: number;
+  param2: number;
+  param3: number;
+  param4: number;
+}
+interface GcsMissionPayload {
+  items: WaypointItem[];
+  targetSystem?: number;      // default 1
+  targetComponent?: number;   // default 1
+  missionType?: number;       // default 0 (MAV_MISSION_TYPE_MISSION)
+}
+```
+
+Preload: `window.gcs.mission.upload(payload)`.
+
+**Main today:** encodes **MISSION_COUNT (#44)** only — announces `items.length`. Full `MISSION_REQUEST` / `MISSION_ITEM_INT` handshake is **next phase**.
 
 **MAVLink encoding (Main):**
 | command | MAV_CMD | params |
@@ -135,12 +174,8 @@ interface VehicleState {
     percent: number | null;     // null if MAVLink -1
     lastUpdatedAt: number;
   };
-  vfrHud: {
-    airspeedMs: number | null;
-    groundspeedMs: number | null;
-    climbMs: number | null;
-    lastUpdatedAt: number;
-  };
+  vfrHud: { airspeedMs, groundspeedMs, climbMs, lastUpdatedAt };
+  attitude: { rollDeg, pitchDeg, yawDeg, lastUpdatedAt };  // msg 30 ATTITUDE
 }
 ```
 
@@ -208,6 +243,20 @@ Renderer: window.gcs.vehicle.sendCommand({ command: 'arm'|'disarm'|'rtl' })
 
 **UI:** `VehicleCommandControls` + confirm modal before send.
 
+### Pipeline D — Mission upload (stub)
+
+```
+Renderer: useMissionStore.uploadMission()
+  → window.gcs.mission.upload(GcsMissionPayload)
+  → ipc invoke datalink:mission:upload
+  → ConnectionManager.uploadMission
+  → mission-egress → sendFrameOnActiveLink (same guard as commands)
+  → mavlink-mission: encode MISSION_COUNT (#44, count = items.length)
+  → active transport.send(buffer) ONLY
+```
+
+**Not yet:** MISSION_REQUEST / MISSION_ITEM_INT loop, map click → waypoint markers, mission list panel.
+
 ---
 
 ## 6. Renderer stores
@@ -216,7 +265,8 @@ Renderer: window.gcs.vehicle.sendCommand({ command: 'arm'|'disarm'|'rtl' })
 |-------|------|-----|
 | Datalink | `useDatalinkFeatureStore` | `gcs.datalink.onPayload` |
 | Vehicle | `useVehicleStore` | `gcs.vehicle.onState` |
-| Map | `useMapStore` | (local only — tile mode toggle) |
+| Map | `useMapStore` | (local — tile mode) |
+| Mission | `useMissionStore` | `gcs.mission.upload` (invoke) |
 
 `App.tsx` mounts datalink + vehicle IPC on load.
 
@@ -239,6 +289,8 @@ Renderer: window.gcs.vehicle.sendCommand({ command: 'arm'|'disarm'|'rtl' })
 | H16 UI | H16ConnectPanel + SerialPort.list |
 | TIMESYNC RTT | `timesync-rtt.ts` + router `rttSlotProvider` + UI RTT display |
 | Electron build | `main.cjs` / `preload.cjs`; `serialport` external + CJS lib format |
+| Map HUD | `MapHudOverlay` + ATTITUDE parse |
+| Mission foundation | `mission.ts`, `useMissionStore`, MISSION_COUNT stub |
 
 **Build note:** `package.json` has `"type":"module"` — Main/Preload must be **`.cjs`** + `lib.formats: ['cjs']` in `vite.config.ts` so `serialport` native bindings and `__dirname` work.
 
@@ -248,29 +300,28 @@ Renderer: window.gcs.vehicle.sendCommand({ command: 'arm'|'disarm'|'rtl' })
 
 | Done | Not yet |
 |------|---------|
-| Dual link + router + dedup | Mission upload / geo-fence |
-| Command egress (arm/disarm/rtl/set_mode) | Full MAVLink dialect |
-| Flight mode dropdown + confirm | — |
-| Telemetry parser (5 msg types incl. ATTITUDE) | Mission protocol |
-| H16 serial connect UI | Mission planner |
+| Dual link + router + dedup | Full MISSION_ITEM upload handshake |
+| Command egress (arm/disarm/rtl/set_mode) | Geo-fence / rally |
+| Flight mode dropdown + confirm | Full MAVLink dialect |
+| Telemetry (5 msg types incl. ATTITUDE) | GPS_RAW_INT, BATTERY_STATUS |
+| H16 serial connect UI | — |
 | Vehicle IPC + monitor UI | — |
-| Hybrid map (OSM + gcs-tiles) | — |
-| Map HUD overlay (ATTITUDE + VFR readouts) | Mission planner |
-| Leaflet + vehicle marker | — |
-| TIMESYNC RTT (per-link, 1.5s ping, EWMA) | — |
-| Router RTT in toolbar + RouterStatusPanel | — |
+| Hybrid map + HUD overlay | — |
+| TIMESYNC RTT + toolbar RTT display | — |
+| Mission types + Zustand store + MISSION_COUNT stub | Map waypoint editor UI |
+| Active-link guard reused for mission egress | Mission confirm modal + list panel |
 
 ---
 
 ## 9. Suggested next prompts for Gemini
 
-**A. HUD overlay on map (priority)**
+**A. Map mission editor (priority)**
 
-> Add `VehicleAttitude` + ATTITUDE (#30) parse in Main; overlay on `MapDisplay` (airspeed, alt, heading, artificial horizon) via `useVehicleStore`.
+> Wire Leaflet map click → `useMissionStore.addWaypoint`; show numbered markers + side panel to edit alt/remove/reorder; upload button calls `mission.upload`.
 
-**B. Mission planner**
+**B. MISSION_ITEM handshake (Main)**
 
-> Mission items egress via same active-link guard; extend `GcsCommandType` as needed.
+> After MISSION_COUNT, handle `MISSION_REQUEST` / send `MISSION_ITEM_INT` per seq on active link; extend `mission-egress.ts` with state machine.
 
 **C. Extend telemetry**
 
@@ -294,7 +345,7 @@ DEDUP_TTL_MS = 2000
 
 ## 11. Rules for Gemini
 
-1. **Contract first:** `shared/types/datalink.ts` or `shared/types/vehicle.ts` before Main/UI code.
+1. **Contract first:** `shared/types/datalink.ts`, `shared/types/vehicle.ts`, or **`shared/types/mission.ts`** before Main/UI code.
 2. **Parsing / routing / sockets** stay in `electron/connection/*`.
 3. **Renderer** only subscribes via preload — never `require('dgram')` in React.
 4. Per-link stats remain independent; router + parser are layers on top.
@@ -308,23 +359,24 @@ Repo: https://github.com/zhaot3065/mdt-gcs (main)
 Stack: Electron+React+Zustand+Tailwind+Leaflet. ArduPilot GCS, dual link (ethernet + h16_rf).
 
 IPC in:
-- datalink:snapshot → DatalinkIpcPayload, 200ms
-- vehicle:state → VehicleState, 150ms
+- datalink:snapshot → DatalinkIpcPayload, 200ms (router.rtt: TIMESYNC preferred)
+- vehicle:state → VehicleState, 150ms (incl. attitude for HUD)
 
-IPC out (egress):
-- datalink:send-command → arm|disarm|rtl|set_mode (+ customMode) → GcsCommandResult
-- Preload: window.gcs.vehicle.sendCommand
-- Sends MAVLink COMMAND_LONG on router active link only; blocks if stale/offline
+IPC out (egress, active link only):
+- datalink:send-command → arm|disarm|rtl|set_mode → GcsCommandResult
+- datalink:mission:upload → GcsMissionPayload → GcsCommandResult (MISSION_COUNT stub today)
+- Preload: window.gcs.vehicle.sendCommand, window.gcs.mission.upload
 
-Map: Online OSM / Offline gcs-tiles:// → userData/maps/{z}/{x}/{y}.png
+Main pipelines:
+- transport → timesync-rtt → router dedup → mavlink-parser → vehicle:state
+- send-command / mission:upload → sendFrameOnActiveLink guard → active transport.send
 
-Main: transport → router (dedup) → telemetry parser → vehicle:state
-     + send-command → active transport.send only
+Renderer stores: datalink, vehicle, map (+ MapHudOverlay), mission (useMissionStore — waypoints[], no map UI yet)
 
-Renderer: H16ConnectPanel (getSerialPorts on mount), EthernetConnectPanel, FlightModeSelector, VehicleCommandControls
+Done: TIMESYNC RTT, Electron CJS/serialport fix, map HUD, mission contract + MISSION_COUNT stub.
+Next: map waypoint editor UI, then MISSION_ITEM_INT handshake.
 
-TIMESYNC RTT + map HUD done. Next: mission planner.
-Paste full spec: docs/GEMINI_REVIEW.md
+Paste full spec: docs/GEMINI_REVIEW.md + docs/ARCHITECTURE.md
 ```
 
 ---

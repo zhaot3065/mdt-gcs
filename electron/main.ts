@@ -13,6 +13,7 @@ import {
   type GcsCommandRequest,
   type SerialConnectOptions,
 } from '../shared/types/datalink';
+import type { GcsMissionPayload } from '../shared/types/mission';
 import { VEHICLE_BROADCAST_MS } from '../shared/types/vehicle';
 
 registerGcsTilesScheme();
@@ -78,6 +79,10 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC_CHANNELS.SEND_COMMAND, (_e, request: GcsCommandRequest) => {
     return connectionManager.sendGcsCommand(request);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MISSION_UPLOAD, (_e, payload: GcsMissionPayload) => {
+    return connectionManager.uploadMission(payload);
   });
 }
 

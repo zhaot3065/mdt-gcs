@@ -26,6 +26,8 @@ import { TcpClientTransport } from './tcp-socket';
 
 import { SerialTransport } from './serial-port';
 import { sendCommandOnActiveLink } from './command-egress';
+import { uploadMissionOnActiveLink } from './mission-egress';
+import type { GcsMissionPayload } from '../../shared/types/mission';
 
 
 
@@ -308,14 +310,22 @@ export class ConnectionManager {
    * Egress: send MAVLink COMMAND_LONG only on MavlinkRouter active link.
    */
   sendGcsCommand(request: GcsCommandRequest): GcsCommandResult {
-    return sendCommandOnActiveLink(
-      {
-        router: this.router,
-        getLinks: () => this.buildPayload().links,
-        getTransport: (id) => this.links.get(id)?.active,
-      },
-      request,
-    );
+    return sendCommandOnActiveLink(this.egressContext(), request);
+  }
+
+  /**
+   * Mission upload stub: MISSION_COUNT on active link (MISSION_ITEM loop — later).
+   */
+  uploadMission(payload: GcsMissionPayload): GcsCommandResult {
+    return uploadMissionOnActiveLink(this.egressContext(), payload);
+  }
+
+  private egressContext(): Parameters<typeof sendCommandOnActiveLink>[0] {
+    return {
+      router: this.router,
+      getLinks: () => this.buildPayload().links,
+      getTransport: (id) => this.links.get(id)?.active,
+    };
   }
 
   private wireTransport(

@@ -129,7 +129,7 @@ export const H16_BAUD_RATE_OPTIONS = [
 export const DEFAULT_MAVLINK_PORT = 14550;
 
 /** High-level GCS commands (Main builds MAVLink COMMAND_LONG) */
-export type GcsCommandType = 'arm' | 'disarm' | 'rtl' | 'set_mode';
+export type GcsCommandType = 'arm' | 'disarm' | 'rtl' | 'set_mode' | 'mission_upload';
 
 export interface GcsCommandRequest {
   command: GcsCommandType;
@@ -154,6 +154,8 @@ export interface GcsCommandResult {
   /** Link used for egress when ok */
   activeLinkId?: DatalinkId;
   bytesSent?: number;
+  /** Mission upload: waypoint count announced via MISSION_COUNT */
+  missionItemCount?: number;
   error?: string;
   errorCode?: GcsCommandErrorCode;
 }
@@ -168,6 +170,8 @@ export const IPC_CHANNELS = {
   LIST_SERIAL_PORTS: 'datalink:serial:list',
   /** Renderer → Main: egress on router active link only */
   SEND_COMMAND: 'datalink:send-command',
+  /** Renderer → Main: mission upload (MISSION_COUNT stub; active link only) */
+  MISSION_UPLOAD: 'datalink:mission:upload',
 } as const;
 
 /** Stale packet threshold aligned with link-quality.ts */

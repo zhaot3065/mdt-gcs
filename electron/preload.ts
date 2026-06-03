@@ -9,6 +9,7 @@ import {
   type SerialPortInfo,
 } from '../shared/types/datalink';
 import { VEHICLE_IPC_CHANNELS, type VehicleState } from '../shared/types/vehicle';
+import type { GcsMissionPayload } from '../shared/types/mission';
 
 export interface GcsBridgeApi {
   datalink: {
@@ -25,6 +26,9 @@ export interface GcsBridgeApi {
   vehicle: {
     onState: (handler: (state: VehicleState) => void) => () => void;
     sendCommand: (request: GcsCommandRequest) => Promise<GcsCommandResult>;
+  };
+  mission: {
+    upload: (payload: GcsMissionPayload) => Promise<GcsCommandResult>;
   };
 }
 
@@ -49,6 +53,9 @@ const api: GcsBridgeApi = {
       return () => ipcRenderer.removeListener(VEHICLE_IPC_CHANNELS.VEHICLE_STATE, listener);
     },
     sendCommand: (request) => ipcRenderer.invoke(IPC_CHANNELS.SEND_COMMAND, request),
+  },
+  mission: {
+    upload: (payload) => ipcRenderer.invoke(IPC_CHANNELS.MISSION_UPLOAD, payload),
   },
 };
 

@@ -1,6 +1,9 @@
 import type { GcsCommandType } from '@shared/types/datalink';
 
-const LABELS: Record<Exclude<GcsCommandType, 'set_mode'>, { title: string; detail: string; confirm: string }> = {
+const LABELS: Record<
+  Exclude<GcsCommandType, 'set_mode' | 'mission_upload'>,
+  { title: string; detail: string; confirm: string }
+> = {
   arm: {
     title: '시동 (ARM)',
     detail: '프로펠러가 회전할 수 있습니다. 주변 안전을 확인하세요.',
@@ -19,7 +22,7 @@ const LABELS: Record<Exclude<GcsCommandType, 'set_mode'>, { title: string; detai
 };
 
 interface Props {
-  command: GcsCommandType;
+  command: Exclude<GcsCommandType, 'mission_upload'>;
   /** For set_mode: human-readable mode name (e.g. LOITER) */
   displayName?: string;
   activeRouteLabel: string | null;

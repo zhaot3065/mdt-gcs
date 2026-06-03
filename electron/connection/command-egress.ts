@@ -22,18 +22,34 @@ export function sendCommandOnActiveLink(
   ctx: CommandEgressContext,
   request: GcsCommandRequest,
 ): GcsCommandResult {
+  const frame = buildCommandFromGcsRequest(request);
+  if (!frame) {
+    return fail(request.command, 'ENCODE_FAILED', 'Failed to encode MAVLink COMMAND_LONG.');
+  }
+  return sendFrameOnActiveLink(ctx, frame, request.command);
+}
+
+/**
+ * Shared active-link egress guard — reused by commands and mission upload.
+ */
+export function sendFrameOnActiveLink(
+  ctx: CommandEgressContext,
+  frame: Buffer,
+  command: GcsCommandRequest['command'],
+  extra: Partial<GcsCommandResult> = {},
+): GcsCommandResult {
   const links = ctx.getLinks();
   const routerSnap = ctx.router.getSnapshot(links);
   const activeLinkId = routerSnap.activeLinkId;
 
   if (!activeLinkId) {
-    return fail(request.command, 'NO_ACTIVE_LINK', 'No active route — connect a datalink and wait for telemetry.');
+    return fail(command, 'NO_ACTIVE_LINK', 'No active route — connect a datalink and wait for telemetry.');
   }
 
   const link = links.find((l) => l.id === activeLinkId);
   if (!link || link.state !== 'connected') {
     return fail(
-      request.command,
+      command,
       'LINK_NOT_CONNECTED',
       `Active link "${activeLinkId}" is not connected.`,
     );
@@ -41,37 +57,33 @@ export function sendCommandOnActiveLink(
 
   if (!link.health.isLive) {
     return fail(
-      request.command,
+      command,
       'LINK_NOT_LIVE',
-      `Active link "${activeLinkId}" is stale — command blocked for safety.`,
+      `Active link "${activeLinkId}" is stale — egress blocked for safety.`,
     );
   }
 
   const transport = ctx.getTransport(activeLinkId);
   if (!transport?.isConnected()) {
     return fail(
-      request.command,
+      command,
       'LINK_NOT_CONNECTED',
       `Transport for "${activeLinkId}" is unavailable.`,
     );
-  }
-
-  const frame = buildCommandFromGcsRequest(request);
-  if (!frame) {
-    return fail(request.command, 'ENCODE_FAILED', 'Failed to encode MAVLink COMMAND_LONG.');
   }
 
   try {
     transport.send(frame);
     return {
       ok: true,
-      command: request.command,
+      command,
       activeLinkId,
       bytesSent: frame.length,
+      ...extra,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return fail(request.command, 'SEND_FAILED', msg);
+    return fail(command, 'SEND_FAILED', msg);
   }
 }
 

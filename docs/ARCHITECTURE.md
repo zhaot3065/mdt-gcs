@@ -28,6 +28,7 @@ MDT_GCS/
 │   └── types/
 │       ├── datalink.ts          # IPC contracts, DatalinkSnapshot (main + renderer)
 │       ├── vehicle.ts           # VehicleState + vehicle:state IPC
+│       ├── mission.ts           # WaypointItem, GcsMissionPayload
 │       └── map.ts               # Tile URLs + map mode constants
 ├── electron/                    # MAIN PROCESS — privileged I/O
 │   ├── main.ts                  # Window + IPC + gcs-tiles protocol
@@ -39,6 +40,9 @@ MDT_GCS/
 │       ├── link-quality.ts
 │       ├── mavlink-router.ts    # Dedup + active link selection
 │       ├── mavlink-parser.ts    # Router frames → VehicleState
+│       ├── mavlink-mission.ts   # MISSION_COUNT encoder
+│       ├── mission-egress.ts    # Mission upload stub
+│       ├── command-egress.ts    # sendFrameOnActiveLink (shared guard)
 │       ├── mavlink-frame.ts     # Shared frame parser
 │       ├── udp-socket.ts
 │       ├── tcp-socket.ts
@@ -52,7 +56,9 @@ MDT_GCS/
 │   │   └── components/VehicleMonitorPanel.tsx
 │   ├── features/map/
 │   │   ├── store/use-map-store.ts
-│   │   └── components/MapDisplay.tsx
+│   │   └── components/MapDisplay.tsx, MapHudOverlay.tsx
+│   ├── features/mission/
+│   │   └── store/use-mission-store.ts
 │   ├── stores/
 │   │   └── datalink-store.ts    # Re-export shim → features/datalink
 │   ├── components/
@@ -65,12 +71,14 @@ MDT_GCS/
 └── package.json
 ```
 
-**Planned growth**:
+**Implemented (not planned only):**
 
 ```
-src/features/mission/
-electron/connection/timesync-rtt.ts   # TIMESYNC #111 → MavlinkRouter rttSlotProvider
-electron/connection/mavlink-pack.ts  # Shared v2 frame packer (commands + TIMESYNC)
+electron/connection/timesync-rtt.ts
+electron/connection/mavlink-pack.ts
+electron/connection/mavlink-mission.ts
+electron/connection/mission-egress.ts
+src/features/mission/store/use-mission-store.ts
 ```
 
 ---
@@ -153,12 +161,23 @@ Renderer: Leaflet + `useVehicleStore` marker + `useMapStore` tile mode toggle.
 | Channel | Direction | Payload |
 |---------|-----------|---------|
 | `datalink:send-command` | Renderer → Main (invoke) | `GcsCommandRequest` → `GcsCommandResult` |
+| `datalink:mission:upload` | Renderer → Main (invoke) | `GcsMissionPayload` → `GcsCommandResult` |
 
 Main encodes MAVLink v2 `COMMAND_LONG` (arm/disarm/rtl/set_mode via `MAV_CMD_DO_SET_MODE`) and sends **only** on `MavlinkRouter.activeLinkId` transport. Blocks if no active link or link not live.
 
 Renderer: `FlightModeSelector` — dropdown + confirm modal; `customMode` in `GcsCommandRequest`.
 
 Preload: `window.gcs.vehicle.sendCommand(request)`.
+
+### Mission upload (stub — active link only)
+
+Defined in `shared/types/mission.ts`. Invoke `datalink:mission:upload` with `GcsMissionPayload` (`items: WaypointItem[]`).
+
+Main path: `mission-egress.ts` → `sendFrameOnActiveLink()` (same guard as commands) → `encodeMissionCount()` (MAVLink #44). Announces waypoint count only; **MISSION_ITEM_INT handshake is a later phase**.
+
+Renderer: `useMissionStore` — `waypoints`, `addWaypoint`, `updateWaypoint`, `removeWaypoint`, `uploadMission()`.
+
+Preload: `window.gcs.mission.upload(payload)`.
 
 ### H16 serial connect
 
@@ -261,6 +280,6 @@ When generating the **next prompt**, include:
 
 1. This file path: `docs/ARCHITECTURE.md`
 2. Which layer you are extending: `electron/connection/*` vs `src/features/*`
-3. Whether behavior changes IPC (`shared/types/datalink.ts` must be updated first)
+3. Whether behavior changes IPC (`shared/types/datalink.ts`, `vehicle.ts`, or **`mission.ts`** must be updated first)
 
 Public repo: see root `README.md` for clone URL.

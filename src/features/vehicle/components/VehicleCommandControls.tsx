@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import type { GcsCommandType } from '@shared/types/datalink';
+
+type VehiclePanelCommand = Exclude<GcsCommandType, 'mission_upload'>;
 import { useDatalinkFeatureStore } from '@/features/datalink/store/use-datalink-store';
 import { useVehicleStore } from '../store/use-vehicle-store';
 import { CommandConfirmModal } from './CommandConfirmModal';
@@ -17,12 +19,12 @@ export function VehicleCommandControls() {
   const sendCommand = useVehicleStore((s) => s.sendCommand);
   const activeLinkId = useDatalinkFeatureStore((s) => s.router.activeLinkId);
 
-  const [pending, setPending] = useState<GcsCommandType | null>(null);
+  const [pending, setPending] = useState<VehiclePanelCommand | null>(null);
 
   const activeRouteLabel = activeLinkId ? LINK_LABEL[activeLinkId] ?? activeLinkId : null;
   const controlsDisabled = !connected || commandBusy;
 
-  const openConfirm = (command: GcsCommandType) => {
+  const openConfirm = (command: VehiclePanelCommand) => {
     if (controlsDisabled) return;
     setPending(command);
   };
