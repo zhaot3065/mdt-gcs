@@ -9,7 +9,7 @@
 
 ## 1. Project summary (one paragraph)
 
-**MDT GCS** is an Electron + React GCS for ArduPilot with dual datalinks, **MavlinkRouter**, **VehicleState** telemetry (150 ms), and a **hybrid map**: online OpenStreetMap or offline tiles via custom protocol **`gcs-tiles://`** served from `userData/maps/`. Leaflet map shows vehicle position/heading from `useVehicleStore` with multicopter/VTOL SVG marker.
+**MDT GCS** is an Electron + React GCS for ArduPilot with dual datalinks, **MavlinkRouter**, **VehicleState** telemetry (150 ms), **command egress** (ARM/DISARM/RTL on active link only via `datalink:send-command`), and a **hybrid map** (OSM online / `gcs-tiles://` offline). Leaflet shows live position/heading; vehicle panel uses a confirm modal before sending commands.
 
 ---
 
@@ -43,6 +43,8 @@ MDT_GCS/
 │   ├── connection-manager.ts
 │   ├── mavlink-router.ts         # Dedup + active link + 'frame' event
 │   ├── mavlink-parser.ts         # frame → VehicleState
+│   ├── mavlink-command.ts        # COMMAND_LONG encoder
+│   ├── command-egress.ts         # active-link send guard
 │   ├── mavlink-frame.ts
 │   ├── mavlink-stats.ts
 │   └── udp / tcp / serial transports
@@ -56,7 +58,7 @@ MDT_GCS/
 electron/protocol/gcs-tiles-protocol.ts  # protocol.handle → userData/maps
 ```
 
-**Preload:** `window.gcs.datalink.*` + `window.gcs.vehicle.onState(cb)`
+**Preload:** `window.gcs.datalink.*` + `window.gcs.vehicle.onState` + `vehicle.sendCommand`
 
 ---
 
