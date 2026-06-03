@@ -1,6 +1,8 @@
 import type {
   DatalinkIpcPayload,
   EthernetConnectOptions,
+  GcsCommandRequest,
+  GcsCommandResult,
   SerialConnectOptions,
 } from '@shared/types/datalink';
 import type { VehicleState } from '@shared/types/vehicle';
@@ -16,6 +18,7 @@ export interface GcsBridgeApi {
   };
   vehicle: {
     onState: (handler: (state: VehicleState) => void) => () => void;
+    sendCommand: (request: GcsCommandRequest) => Promise<GcsCommandResult>;
   };
 }
 

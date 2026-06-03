@@ -147,6 +147,16 @@ Register `gcs-tiles` via `registerSchemesAsPrivileged` **before** `app.whenReady
 
 Renderer: Leaflet + `useVehicleStore` marker + `useMapStore` tile mode toggle.
 
+### Command egress (active link only)
+
+| Channel | Direction | Payload |
+|---------|-----------|---------|
+| `datalink:send-command` | Renderer → Main (invoke) | `GcsCommandRequest` → `GcsCommandResult` |
+
+Main encodes MAVLink v2 `COMMAND_LONG` (arm/disarm/rtl) and sends **only** on `MavlinkRouter.activeLinkId` transport. Blocks if no active link or link not live.
+
+Preload: `window.gcs.vehicle.sendCommand(request)`.
+
 ---
 
 ## 5. UDP receive path (Main Process)

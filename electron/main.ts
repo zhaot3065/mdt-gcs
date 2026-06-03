@@ -10,6 +10,7 @@ import {
 import {
   IPC_CHANNELS,
   type EthernetConnectOptions,
+  type GcsCommandRequest,
   type SerialConnectOptions,
 } from '../shared/types/datalink';
 import { VEHICLE_BROADCAST_MS } from '../shared/types/vehicle';
@@ -74,6 +75,10 @@ function registerIpc(): void {
   });
 
   ipcMain.handle(IPC_CHANNELS.LIST_SERIAL_PORTS, () => connectionManager.listSerialPorts());
+
+  ipcMain.handle(IPC_CHANNELS.SEND_COMMAND, (_e, request: GcsCommandRequest) => {
+    return connectionManager.sendGcsCommand(request);
+  });
 }
 
 app.whenReady().then(async () => {

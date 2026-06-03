@@ -107,6 +107,34 @@ export interface SerialConnectOptions {
 
 export const DEFAULT_MAVLINK_PORT = 14550;
 
+/** High-level GCS commands (Main builds MAVLink COMMAND_LONG) */
+export type GcsCommandType = 'arm' | 'disarm' | 'rtl';
+
+export interface GcsCommandRequest {
+  command: GcsCommandType;
+  /** MAVLink target_system — default 1 */
+  targetSystem?: number;
+  /** MAVLink target_component — default 1 (autopilot) */
+  targetComponent?: number;
+}
+
+export type GcsCommandErrorCode =
+  | 'NO_ACTIVE_LINK'
+  | 'LINK_NOT_CONNECTED'
+  | 'LINK_NOT_LIVE'
+  | 'ENCODE_FAILED'
+  | 'SEND_FAILED';
+
+export interface GcsCommandResult {
+  ok: boolean;
+  command: GcsCommandType;
+  /** Link used for egress when ok */
+  activeLinkId?: DatalinkId;
+  bytesSent?: number;
+  error?: string;
+  errorCode?: GcsCommandErrorCode;
+}
+
 export const IPC_CHANNELS = {
   /** @deprecated payload shape — use DatalinkIpcPayload */
   DATALINK_SNAPSHOT: 'datalink:snapshot',
@@ -115,6 +143,8 @@ export const IPC_CHANNELS = {
   H16_CONNECT: 'datalink:h16:connect',
   H16_DISCONNECT: 'datalink:h16:disconnect',
   LIST_SERIAL_PORTS: 'datalink:serial:list',
+  /** Renderer → Main: egress on router active link only */
+  SEND_COMMAND: 'datalink:send-command',
 } as const;
 
 /** Stale packet threshold aligned with link-quality.ts */

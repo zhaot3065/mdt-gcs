@@ -3,6 +3,8 @@ import {
   IPC_CHANNELS,
   type DatalinkIpcPayload,
   type EthernetConnectOptions,
+  type GcsCommandRequest,
+  type GcsCommandResult,
   type SerialConnectOptions,
 } from '../shared/types/datalink';
 import { VEHICLE_IPC_CHANNELS, type VehicleState } from '../shared/types/vehicle';
@@ -18,6 +20,7 @@ export interface GcsBridgeApi {
   };
   vehicle: {
     onState: (handler: (state: VehicleState) => void) => () => void;
+    sendCommand: (request: GcsCommandRequest) => Promise<GcsCommandResult>;
   };
 }
 
@@ -40,6 +43,7 @@ const api: GcsBridgeApi = {
       ipcRenderer.on(VEHICLE_IPC_CHANNELS.VEHICLE_STATE, listener);
       return () => ipcRenderer.removeListener(VEHICLE_IPC_CHANNELS.VEHICLE_STATE, listener);
     },
+    sendCommand: (request) => ipcRenderer.invoke(IPC_CHANNELS.SEND_COMMAND, request),
   },
 };
 

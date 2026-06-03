@@ -1,4 +1,5 @@
 import { useVehicleStore } from '../store/use-vehicle-store';
+import { VehicleCommandControls } from './VehicleCommandControls';
 
 function fmtCoord(value: number | null, decimals = 6): string {
   if (value == null || !Number.isFinite(value)) return '—';
@@ -128,7 +129,9 @@ export function VehicleMonitorPanel() {
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-2 border-t border-slate-700 pt-3 text-center text-xs">
+      <VehicleCommandControls />
+
+      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-slate-700 pt-3 text-center text-xs">
         <div>
           <p className="text-slate-500">Airspeed</p>
           <p className="font-mono text-slate-200">{fmtNum(vfrHud.airspeedMs, 'm/s')}</p>

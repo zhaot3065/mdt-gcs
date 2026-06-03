@@ -3,7 +3,7 @@
 > **Repo:** https://github.com/zhaot3065/mdt-gcs  
 > **Branch:** `main`  
 > **Purpose:** Paste this document (or sections) into Gemini when you cannot clone the repo.  
-> **Last updated:** 2026-06-03 — + Hybrid map (gcs-tiles + Leaflet)
+> **Last updated:** 2026-06-03 — + Command egress (active-link only)
 
 ---
 
@@ -70,6 +70,16 @@ Payload: **`DatalinkIpcPayload`** = `{ links[2], router, updatedAt }`
 - Router: `activeLinkId`, `selectionReason`, dedup metrics, `rtt` (heartbeat_proxy; TIMESYNC hook ready)
 
 Invoke: `ethernet:connect|disconnect`, `h16:connect|disconnect`, `serial:list` → returns `DatalinkIpcPayload`.
+
+**Egress invoke:** `datalink:send-command` → `GcsCommandRequest` → `GcsCommandResult`
+
+```typescript
+type GcsCommandType = 'arm' | 'disarm' | 'rtl';
+interface GcsCommandRequest { command: GcsCommandType; targetSystem?: number; targetComponent?: number; }
+interface GcsCommandResult { ok: boolean; command; activeLinkId?; bytesSent?; error?; errorCode?; }
+```
+
+Preload: `window.gcs.vehicle.sendCommand(request)`. Main: `COMMAND_LONG` on active link only.
 
 ### 4b. Vehicle (`vehicle:state`, ~150 ms throttled)
 
@@ -159,6 +169,21 @@ MavlinkRouter 'frame' → MavlinkTelemetryParser
 **Router dedup:** `sysid:compid:msgid:seq`, TTL 2s.  
 **Active link:** score + Ethernet priority; stale failover to H16.
 
+### Pipeline C — Command egress
+
+```
+Renderer: window.gcs.vehicle.sendCommand({ command: 'arm'|'disarm'|'rtl' })
+  → ipc invoke datalink:send-command
+  → ConnectionManager.sendGcsCommand
+  → command-egress: validate activeLinkId + link live
+  → mavlink-command: encode COMMAND_LONG (MAVLink v2)
+  → active transport.send(buffer) ONLY (never backup link)
+```
+
+**Safety blocks:** `NO_ACTIVE_LINK`, `LINK_NOT_CONNECTED`, `LINK_NOT_LIVE`, `ENCODE_FAILED`, `SEND_FAILED`.
+
+**UI:** `VehicleCommandControls` + confirm modal before send.
+
 ---
 
 ## 6. Renderer stores
@@ -171,7 +196,7 @@ MavlinkRouter 'frame' → MavlinkTelemetryParser
 
 `App.tsx` mounts datalink + vehicle IPC on load.
 
-**UI:** `MapDisplay` (main), `DatalinkStatusBar`, `VehicleMonitorPanel`, `EthernetConnectPanel`, `RouterStatusPanel`, `MapLayerToggle`.
+**UI:** `MapDisplay` (main), `DatalinkStatusBar`, `VehicleMonitorPanel` (+ ARM/DISARM/RTL), `EthernetConnectPanel`, `RouterStatusPanel`, `MapLayerToggle`.
 
 ---
 
@@ -183,6 +208,7 @@ MavlinkRouter 'frame' → MavlinkTelemetryParser
 | Router | MavlinkRouter, DatalinkIpcPayload, features/datalink |
 | Telemetry | vehicle.ts, mavlink-parser, features/vehicle, Tailwind |
 | Map | gcs-tiles protocol, Leaflet, features/map |
+| Egress | send-command IPC, COMMAND_LONG arm/disarm/rtl |
 
 ---
 
@@ -190,22 +216,23 @@ MavlinkRouter 'frame' → MavlinkTelemetryParser
 
 | Done | Not yet |
 |------|---------|
-| Dual link + router + dedup | Command egress on active link only |
+| Dual link + router + dedup | Flight mode change commands |
+| Command egress (arm/disarm/rtl) | Mission upload / geo-fence |
 | Telemetry parser (4 msg types) | Full MAVLink dialect / mission protocol |
 | Vehicle IPC + monitor UI | H16 connect UI panel |
 | ArduPilot flight mode strings | TIMESYNC RTT |
 | Tailwind vehicle gauges | Mission planner |
-| Hybrid map (OSM + gcs-tiles) | Command egress on active link |
-| Leaflet + vehicle marker | H16 connect UI |
+| Hybrid map (OSM + gcs-tiles) | H16 connect UI |
+| Leaflet + vehicle marker | Mission planner |
 | TIMESYNC hook on router (`rttProvider`) | Wired |
 
 ---
 
 ## 9. Suggested next prompts for Gemini
 
-**A. Command egress (priority)**
+**A. Flight mode change**
 
-> Use `MavlinkRouter.getActiveLinkId()` and active transport in ConnectionManager to send COMMAND_LONG / MISSION_ITEM only on the active link. Extend `shared/types/datalink.ts` if UI needs manual override.
+> Extend `GcsCommandType` + `mavlink-command.ts` for DO_SET_MODE / ArduPilot custom_mode. Confirm modal pattern from VehicleCommandControls.
 
 **B. H16 connect UI**
 
@@ -253,20 +280,23 @@ DEDUP_TTL_MS = 2000
 Repo: https://github.com/zhaot3065/mdt-gcs (main)
 Stack: Electron+React+Zustand+Tailwind+Leaflet. ArduPilot GCS, dual link (ethernet + h16_rf).
 
-IPC:
+IPC in:
 - datalink:snapshot → DatalinkIpcPayload, 200ms
 - vehicle:state → VehicleState, 150ms
 
-Map (no IPC):
-- Online: OpenStreetMap tiles
-- Offline: gcs-tiles://{z}/{x}/{y}.png → userData/maps/{z}/{x}/{y}.png
+IPC out (egress):
+- datalink:send-command → { command: arm|disarm|rtl } → GcsCommandResult
+- Preload: window.gcs.vehicle.sendCommand
+- Sends MAVLink COMMAND_LONG on router active link only; blocks if stale/offline
 
-Main: dual transport → MavlinkRouter (dedup) → MavlinkTelemetryParser → vehicle:state
-     + protocol.handle gcs-tiles for offline tiles
+Map: Online OSM / Offline gcs-tiles:// → userData/maps/{z}/{x}/{y}.png
 
-Renderer: useDatalinkFeatureStore, useVehicleStore, useMapStore, MapDisplay (vehicle marker)
+Main: transport → router (dedup) → telemetry parser → vehicle:state
+     + send-command → active transport.send only
 
-Next: command egress (active link), H16 UI, TIMESYNC, HUD overlay on map.
+Renderer: datalink/vehicle/map stores, MapDisplay, VehicleCommandControls (confirm modal)
+
+Next: flight mode command, H16 UI, TIMESYNC, HUD overlay.
 Paste full spec: docs/GEMINI_REVIEW.md
 ```
 
