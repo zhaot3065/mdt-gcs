@@ -1,5 +1,9 @@
 import type { DatalinkId, GcsCommandResult } from '../../shared/types/datalink';
-import type { GcsMissionPayload, WaypointItem } from '../../shared/types/mission';
+import {
+  normalizeMissionType,
+  type GcsMissionPayload,
+  type WaypointItem,
+} from '../../shared/types/mission';
 import {
   encodeMissionCount,
   encodeMissionItemInt,
@@ -9,8 +13,8 @@ import {
   MSG_ID_MISSION_REQUEST,
   MSG_ID_MISSION_REQUEST_INT,
   parseMissionAck,
+  parseMissionRequest,
   parseMissionRequestInt,
-  parseMissionRequestSeq,
 } from './mavlink-mission';
 import {
   type CommandEgressContext,
@@ -160,20 +164,23 @@ function handleRouterFrame(evt: ForwardedMavlinkFrame): void {
 
   switch (msgId) {
     case MSG_ID_MISSION_REQUEST: {
-      const seq = parseMissionRequestSeq(payload);
-      if (seq === null) return;
-      respondWithMissionItem(session, seq);
+      const parsed = parseMissionRequest(payload);
+      if (!parsed) return;
+      if (parsed.missionType !== session.missionType) return;
+      respondWithMissionItem(session, parsed.seq);
       break;
     }
     case MSG_ID_MISSION_REQUEST_INT: {
       const parsed = parseMissionRequestInt(payload);
       if (!parsed) return;
+      if (parsed.missionType !== session.missionType) return;
       respondWithMissionItem(session, parsed.seq);
       break;
     }
     case MSG_ID_MISSION_ACK: {
       const ack = parseMissionAck(payload);
       if (!ack) return;
+      if (ack.missionType !== session.missionType) return;
       handleMissionAck(session, ack.type);
       break;
     }
@@ -225,7 +232,7 @@ export function uploadMissionOnActiveLink(
 
   const targetSystem = payload.targetSystem ?? 1;
   const targetComponent = payload.targetComponent ?? 1;
-  const missionType = payload.missionType ?? 0;
+  const missionType = normalizeMissionType(payload.missionType);
 
   const countFrame = encodeMissionCount({
     targetSystem,

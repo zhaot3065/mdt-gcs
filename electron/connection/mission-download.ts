@@ -1,5 +1,6 @@
 import type { DatalinkId } from '../../shared/types/datalink';
 import {
+  normalizeMissionType,
   reindexWaypointItems,
   type GcsMissionDownloadPayload,
   type GcsMissionDownloadResult,
@@ -183,13 +184,15 @@ export function handleMissionDownloadFrame({ frame }: ForwardedMavlinkFrame): vo
     case MSG_ID_MISSION_COUNT: {
       const parsed = parseMissionCount(payload);
       if (!parsed) return;
+      if (parsed.missionType !== session.missionType) return;
       handleMissionCount(session, parsed.count);
       break;
     }
     case MSG_ID_MISSION_ITEM_INT: {
-      const item = parseMissionItemInt(payload);
-      if (!item) return;
-      handleMissionItemInt(session, item);
+      const parsed = parseMissionItemInt(payload);
+      if (!parsed) return;
+      if (parsed.missionType !== session.missionType) return;
+      handleMissionItemInt(session, parsed.item);
       break;
     }
     default:
@@ -223,7 +226,7 @@ export function downloadMissionOnActiveLink(
 
   const targetSystem = payload.targetSystem ?? 1;
   const targetComponent = payload.targetComponent ?? 1;
-  const missionType = payload.missionType ?? 0;
+  const missionType = normalizeMissionType(payload.missionType);
 
   const listFrame = encodeMissionRequestList({
     targetSystem,

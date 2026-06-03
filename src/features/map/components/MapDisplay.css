@@ -61,3 +61,20 @@
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.45);
   pointer-events: auto;
 }
+
+.mission-wp-badge--mission {
+  border-color: #3d9eff;
+  color: #e8edf5;
+}
+
+.mission-wp-badge--fence {
+  border-color: #f87171;
+  color: #fecaca;
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.35), 0 2px 8px rgba(248, 113, 113, 0.25);
+}
+
+.mission-wp-badge--rally {
+  border-color: #4ade80;
+  color: #dcfce7;
+  box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.35), 0 2px 8px rgba(74, 222, 128, 0.2);
+}

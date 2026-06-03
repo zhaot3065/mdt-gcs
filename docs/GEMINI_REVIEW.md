@@ -127,12 +127,12 @@ interface GcsMissionPayload {
   items: WaypointItem[];
   targetSystem?: number;      // default 1
   targetComponent?: number;   // default 1
-  missionType?: number;       // default 0 (MAV_MISSION_TYPE_MISSION)
+  missionType?: number;       // 0=MISSION, 1=FENCE, 2=RALLY (MAV_MISSION_TYPE)
 }
 interface GcsMissionDownloadPayload {
   targetSystem?: number;
   targetComponent?: number;
-  missionType?: number;
+  missionType?: number;       // 0|1|2 — filters COUNT/ITEM_INT on download
 }
 interface GcsMissionDownloadResult {
   ok: boolean;
@@ -143,7 +143,7 @@ interface GcsMissionDownloadResult {
 
 Preload: `window.gcs.mission.upload(payload)`, `window.gcs.mission.download(payload?)`.
 
-**Main:** upload — `MissionUploadSession` (COUNT→REQUEST→ITEM_INT→ACK). Download — `MissionDownloadSession` (REQUEST_LIST→COUNT→REQUEST_INT→ITEM_INT*→ACK). Mutual exclusion via `mission-transaction-lock.ts`.
+**Main:** upload/download sessions pass `mission_type` on #43/#44/#51/#38/#47. Ingress guards match session `missionType`. Renderer: `missionsByType` + tab selector (Waypoints | Geo-Fence | Rally). Mutex: `mission-transaction-lock.ts`.
 
 **MAVLink encoding (Main):**
 | command | MAV_CMD | params |
@@ -344,6 +344,7 @@ Renderer: useMissionStore.downloadMission()  [Promise]
 | Mission UX | Reorder ▲/▼, command dropdown, HOME row, JSON save/load (renderer-only) |
 | Telemetry ext | GPS_RAW_INT #24 + BATTERY_STATUS #147; toolbar GPS/batt badges |
 | Mission download | `MissionDownloadSession` — REQUEST_LIST→COUNT→REQUEST_INT→ITEM_INT→ACK |
+| Mission types | MAV_MISSION_TYPE 0/1/2; upload/download guards; UI tabs + map styles |
 
 **Build note:** `package.json` has `"type":"module"` — Main/Preload must be **`.cjs`** + `lib.formats: ['cjs']` in `vite.config.ts` so `serialport` native bindings and `__dirname` work.
 
@@ -353,15 +354,13 @@ Renderer: useMissionStore.downloadMission()  [Promise]
 
 | Done | Not yet |
 |------|---------|
-| Dual link + router + dedup + TIMESYNC RTT | Geo-fence / rally missions |
-| Command egress + mission upload handshake | Full MAVLink dialect |
+| Dual link + router + dedup + TIMESYNC RTT | Full MAVLink dialect |
+| Command egress + mission upload/download handshake | SITL integration tests in CI |
 | Map mission editor + MISSION_ITEM_INT Main | |
-| Map HUD (SPD/ALT/HDG/VS + attitude horizon) | Geo-fence / rally mission types |
-| Mission UX: reorder, MAV_CMD select, HOME row | Geo-fence / rally mission types |
-| Mission JSON export/import (`MissionFileDocument`) | SITL integration tests in CI |
-| Mission download → `useMissionStore` sync + map refresh | Full MAVLink dialect |
-| GPS_RAW_INT + BATTERY_STATUS → `VehicleGps` + battery priority | |
-| Toolbar badges: 🛰 sats + 🔋 %; GPS section in VehicleMonitorPanel | |
+| Map HUD + GPS/Battery telemetry | |
+| Mission UX + JSON save/load | |
+| Mission types 0/1/2 (Waypoints, Geo-Fence, Rally) | |
+| `missionsByType` store + tab UI + styled map layers | |
 | H16 + Ethernet connect UI | |
 | Vehicle telemetry + commands | |
 
@@ -369,13 +368,13 @@ Renderer: useMissionStore.downloadMission()  [Promise]
 
 ## 9. Suggested next prompts for Gemini
 
-**A. Geo-fence / rally missions (priority)**
+**A. SITL CI (priority)**
 
-> Extend mission handshake for `MAV_MISSION_TYPE` fence (1) and rally (2); UI type selector.
+> Parser unit tests with recorded MAVLink captures; optional headless mission handshake tests.
 
-**B. SITL CI**
+**B. Fence/Rally command UX**
 
-> Headless Electron or parser unit tests against recorded MAVLink captures.
+> MAV_CMD fence commands (POLYGON, CIRCLE); rally-specific editor constraints.
 
 ---
 
@@ -417,11 +416,11 @@ IPC out:
 - datalink:mission:upload → GcsMissionPayload → Promise<GcsCommandResult>
 - datalink:mission:download → GcsMissionDownloadPayload? → Promise<GcsMissionDownloadResult>
 
-Renderer: mission editor + MissionListPanel (upload + download); HUD; GPS/battery toolbar badges
+Renderer: mission editor + tabs (Waypoints|Geo-Fence|Rally); upload/download per missionType; HUD; GPS/battery badges
 
-Done: dual link router, TIMESYNC RTT, mission upload/download handshake, mission UX,
-  GPS_RAW_INT + BATTERY_STATUS telemetry.
-Next: geo-fence/rally, SITL CI.
+Done: dual link router, TIMESYNC RTT, mission upload/download, mission types 0/1/2,
+  mission UX, GPS/Battery telemetry.
+Next: SITL CI, fence/rally MAV_CMD editor polish.
 
 Paste: docs/GEMINI_REVIEW.md + docs/ARCHITECTURE.md
 ```

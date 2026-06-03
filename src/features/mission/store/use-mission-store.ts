@@ -1,22 +1,28 @@
 import { create } from 'zustand';
 import type { GcsCommandResult } from '@shared/types/datalink';
 import {
+  createEmptyMissionsByType,
   createWaypointItem,
   DEFAULT_MISSION_WP_ALT_M,
+  MAV_MISSION_TYPE,
+  normalizeMissionType,
   reindexWaypointItems,
   type GcsMissionDownloadPayload,
   type GcsMissionDownloadResult,
   type GcsMissionPayload,
+  type MissionDataType,
   type WaypointItem,
 } from '@shared/types/mission';
 
 interface MissionStore {
-  waypoints: WaypointItem[];
+  currentMissionType: MissionDataType;
+  missionsByType: Record<MissionDataType, WaypointItem[]>;
   isEditMode: boolean;
   uploadBusy: boolean;
   downloadBusy: boolean;
   lastUploadResult: GcsCommandResult | null;
   lastDownloadResult: GcsMissionDownloadResult | null;
+  setCurrentMissionType: (type: MissionDataType) => void;
   setEditMode: (enabled: boolean) => void;
   toggleEditMode: () => void;
   addWaypoint: (lat: number, lon: number, alt?: number) => void;
@@ -35,75 +41,117 @@ interface MissionStore {
   ) => Promise<GcsMissionDownloadResult>;
 }
 
+function patchActiveItems(
+  state: MissionStore,
+  updater: (items: WaypointItem[]) => WaypointItem[],
+): Pick<MissionStore, 'missionsByType'> {
+  const type = state.currentMissionType;
+  return {
+    missionsByType: {
+      ...state.missionsByType,
+      [type]: updater(state.missionsByType[type]),
+    },
+  };
+}
+
 export const useMissionStore = create<MissionStore>((set, get) => ({
-  waypoints: [],
+  currentMissionType: MAV_MISSION_TYPE.MISSION,
+  missionsByType: createEmptyMissionsByType(),
   isEditMode: false,
   uploadBusy: false,
   downloadBusy: false,
   lastUploadResult: null,
   lastDownloadResult: null,
 
+  setCurrentMissionType: (type) =>
+    set({ currentMissionType: normalizeMissionType(type) }),
+
   setEditMode: (enabled) => set({ isEditMode: enabled }),
   toggleEditMode: () => set((s) => ({ isEditMode: !s.isEditMode })),
 
   addWaypoint: (lat, lon, alt = DEFAULT_MISSION_WP_ALT_M) => {
-    set((state) => {
-      const seq = state.waypoints.length;
-      return {
-        waypoints: [...state.waypoints, createWaypointItem(seq, lat, lon, alt)],
-      };
-    });
+    set((state) =>
+      patchActiveItems(state, (items) => {
+        const seq = items.length;
+        return [...items, createWaypointItem(seq, lat, lon, alt)];
+      }),
+    );
   },
 
   updateWaypoint: (seq, patch) => {
-    set((state) => ({
-      waypoints: state.waypoints.map((wp) =>
-        wp.seq === seq ? { ...wp, ...patch, seq: wp.seq } : wp,
+    set((state) =>
+      patchActiveItems(state, (items) =>
+        items.map((wp) => (wp.seq === seq ? { ...wp, ...patch, seq: wp.seq } : wp)),
       ),
-    }));
+    );
   },
 
   removeWaypoint: (seq) => {
-    set((state) => ({
-      waypoints: reindexWaypointItems(state.waypoints.filter((wp) => wp.seq !== seq)),
-    }));
+    set((state) =>
+      patchActiveItems(state, (items) =>
+        reindexWaypointItems(items.filter((wp) => wp.seq !== seq)),
+      ),
+    );
   },
 
   reorderWaypoint: (fromIndex, toIndex) => {
-    set((state) => {
-      const items = [...state.waypoints];
-      if (fromIndex < 0 || fromIndex >= items.length) return state;
-      if (toIndex < 0 || toIndex >= items.length) return state;
-      if (fromIndex === toIndex) return state;
-      const [moved] = items.splice(fromIndex, 1);
-      items.splice(toIndex, 0, moved);
-      return { waypoints: reindexWaypointItems(items) };
-    });
+    set((state) =>
+      patchActiveItems(state, (items) => {
+        const next = [...items];
+        if (fromIndex < 0 || fromIndex >= next.length) return items;
+        if (toIndex < 0 || toIndex >= next.length) return items;
+        if (fromIndex === toIndex) return items;
+        const [moved] = next.splice(fromIndex, 1);
+        next.splice(toIndex, 0, moved);
+        return reindexWaypointItems(next);
+      }),
+    );
   },
 
   setWaypointCommand: (seq, command) => {
-    set((state) => ({
-      waypoints: state.waypoints.map((wp) =>
-        wp.seq === seq ? { ...wp, command } : wp,
+    set((state) =>
+      patchActiveItems(state, (items) =>
+        items.map((wp) => (wp.seq === seq ? { ...wp, command } : wp)),
       ),
-    }));
+    );
   },
 
   clearWaypoints: () =>
-    set({ waypoints: [], lastUploadResult: null, lastDownloadResult: null }),
+    set((state) => ({
+      missionsByType: {
+        ...state.missionsByType,
+        [state.currentMissionType]: [],
+      },
+      lastUploadResult: null,
+      lastDownloadResult: null,
+    })),
 
-  setWaypoints: (items) => set({ waypoints: reindexWaypointItems(items) }),
+  setWaypoints: (items) =>
+    set((state) => ({
+      missionsByType: {
+        ...state.missionsByType,
+        [state.currentMissionType]: reindexWaypointItems(items),
+      },
+    })),
 
   importWaypoints: (items) =>
-    set({ waypoints: reindexWaypointItems(items), lastUploadResult: null, lastDownloadResult: null }),
+    set((state) => ({
+      missionsByType: {
+        ...state.missionsByType,
+        [state.currentMissionType]: reindexWaypointItems(items),
+      },
+      lastUploadResult: null,
+      lastDownloadResult: null,
+    })),
 
   uploadMission: async (options) => {
-    const { waypoints } = get();
+    const { missionsByType, currentMissionType } = get();
+    const missionType = normalizeMissionType(options?.missionType ?? currentMissionType);
     const payload: GcsMissionPayload = {
-      items: waypoints,
+      items: missionsByType[missionType],
       targetSystem: options?.targetSystem,
       targetComponent: options?.targetComponent,
-      missionType: options?.missionType,
+      missionType,
     };
 
     if (!window.gcs?.mission?.upload) {
@@ -128,6 +176,9 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
   },
 
   downloadMission: async (options) => {
+    const { currentMissionType } = get();
+    const missionType = normalizeMissionType(options?.missionType ?? currentMissionType);
+
     if (!window.gcs?.mission?.download) {
       const result: GcsMissionDownloadResult = {
         ok: false,
@@ -139,10 +190,18 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
 
     set({ downloadBusy: true, lastDownloadResult: null });
     try {
-      const result = await window.gcs.mission.download(options);
+      const result = await window.gcs.mission.download({
+        ...options,
+        missionType,
+      });
       set({ lastDownloadResult: result });
       if (result.ok && result.waypoints) {
-        set({ waypoints: reindexWaypointItems(result.waypoints) });
+        set((state) => ({
+          missionsByType: {
+            ...state.missionsByType,
+            [missionType]: reindexWaypointItems(result.waypoints!),
+          },
+        }));
       }
       return result;
     } finally {
@@ -150,3 +209,8 @@ export const useMissionStore = create<MissionStore>((set, get) => ({
     }
   },
 }));
+
+/** Active tab waypoints — use in UI selectors */
+export function selectActiveWaypoints(state: MissionStore): WaypointItem[] {
+  return state.missionsByType[state.currentMissionType];
+}

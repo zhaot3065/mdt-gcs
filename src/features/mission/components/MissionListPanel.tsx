@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
 import { useDatalinkFeatureStore } from '@/features/datalink/store/use-datalink-store';
 import { useVehicleStore } from '@/features/vehicle/store/use-vehicle-store';
-import { MISSION_CMD_OPTIONS } from '@shared/types/mission';
-import { useMissionStore } from '../store/use-mission-store';
+import { MISSION_CMD_OPTIONS, MISSION_DATA_TYPE_LABELS, MISSION_DATA_TYPE_TABS } from '@shared/types/mission';
+import { selectActiveWaypoints, useMissionStore } from '../store/use-mission-store';
 import { downloadMissionJson, readMissionJsonFile } from '../utils/mission-file-io';
 import { MissionUploadConfirmModal } from './MissionUploadConfirmModal';
 
@@ -12,7 +12,9 @@ const LINK_LABEL: Record<string, string> = {
 };
 
 export function MissionListPanel() {
-  const waypoints = useMissionStore((s) => s.waypoints);
+  const waypoints = useMissionStore(selectActiveWaypoints);
+  const currentMissionType = useMissionStore((s) => s.currentMissionType);
+  const setCurrentMissionType = useMissionStore((s) => s.setCurrentMissionType);
   const isEditMode = useMissionStore((s) => s.isEditMode);
   const uploadBusy = useMissionStore((s) => s.uploadBusy);
   const downloadBusy = useMissionStore((s) => s.downloadBusy);
@@ -48,17 +50,20 @@ export function MissionListPanel() {
 
   const handleConfirmUpload = async () => {
     setConfirmUpload(false);
-    await uploadMission();
+    await uploadMission({ missionType: currentMissionType });
   };
 
   const handleDownloadMission = async () => {
+    const typeLabel = MISSION_DATA_TYPE_LABELS[currentMissionType];
     if (
       waypoints.length > 0 &&
-      !window.confirm('기체 미션을 다운로드하면 현재 편집 중인 웨이포인트가 덮어씌워집니다. 계속하시겠습니까?')
+      !window.confirm(
+        `기체 ${typeLabel} 데이터를 다운로드하면 현재 편집 중인 항목이 덮어씌워집니다. 계속하시겠습니까?`,
+      )
     ) {
       return;
     }
-    await downloadMission();
+    await downloadMission({ missionType: currentMissionType });
   };
 
   const handleSaveMission = () => {
@@ -89,6 +94,10 @@ export function MissionListPanel() {
       ? `${homeLat.toFixed(6)}, ${homeLon.toFixed(6)}`
       : 'Set HOME on autopilot · telemetry pending';
 
+  const typeLabel = MISSION_DATA_TYPE_LABELS[currentMissionType];
+  const pointLabel =
+    currentMissionType === 0 ? 'waypoint' : currentMissionType === 1 ? 'fence point' : 'rally point';
+
   return (
     <>
       <section
@@ -101,7 +110,8 @@ export function MissionListPanel() {
               Mission planner
             </h2>
             <p className="mt-0.5 text-[10px] text-slate-500">
-              {waypoints.length} waypoint{waypoints.length === 1 ? '' : 's'}
+              {typeLabel} · {waypoints.length} {pointLabel}
+              {waypoints.length === 1 ? '' : 's'}
               {isEditMode ? ' · map click to add' : ''}
             </p>
           </div>
@@ -116,6 +126,36 @@ export function MissionListPanel() {
           >
             {isEditMode ? 'Edit ON' : 'Edit OFF'}
           </button>
+        </div>
+
+        <div
+          className="mb-3 flex rounded-lg border border-slate-700 bg-slate-900/80 p-0.5"
+          role="tablist"
+          aria-label="Mission data type"
+        >
+          {MISSION_DATA_TYPE_TABS.map((tab) => {
+            const active = currentMissionType === tab.value;
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setCurrentMissionType(tab.value)}
+                className={`flex-1 rounded-md px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide transition-colors ${
+                  active
+                    ? tab.value === 1
+                      ? 'bg-red-950 text-red-200 ring-1 ring-red-500/50'
+                      : tab.value === 2
+                        ? 'bg-emerald-950 text-emerald-200 ring-1 ring-emerald-500/50'
+                        : 'bg-sky-950 text-sky-200 ring-1 ring-sky-500/50'
+                    : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
         <div className="mb-3 flex gap-2">
@@ -299,7 +339,7 @@ export function MissionListPanel() {
             }`}
           >
             {lastDownloadResult.ok
-              ? `DOWNLOAD OK · ${lastDownloadResult.waypoints?.length ?? 0} wp from autopilot`
+              ? `DOWNLOAD OK · ${typeLabel} · ${lastDownloadResult.waypoints?.length ?? 0} items`
               : `DOWNLOAD FAIL · ${lastDownloadResult.error}`}
           </p>
         )}

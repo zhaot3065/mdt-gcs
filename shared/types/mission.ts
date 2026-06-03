@@ -36,12 +36,49 @@ export function isMissionNavCommand(command: number): command is MissionNavComma
   return Object.values(MAV_CMD).includes(command as MissionNavCommand);
 }
 
-/** MAV_MISSION_TYPE — mission storage target */
+/** MAV_MISSION_TYPE — mission storage target (MAVLink common) */
 export const MAV_MISSION_TYPE = {
   MISSION: 0,
   FENCE: 1,
   RALLY: 2,
 } as const;
+
+/** Explicit aliases for handoff docs / IPC */
+export const MAV_MISSION_TYPE_MISSION = MAV_MISSION_TYPE.MISSION;
+export const MAV_MISSION_TYPE_FENCE = MAV_MISSION_TYPE.FENCE;
+export const MAV_MISSION_TYPE_RALLY = MAV_MISSION_TYPE.RALLY;
+
+export type MissionDataType =
+  | typeof MAV_MISSION_TYPE.MISSION
+  | typeof MAV_MISSION_TYPE.FENCE
+  | typeof MAV_MISSION_TYPE.RALLY;
+
+export function normalizeMissionType(value?: number): MissionDataType {
+  if (value === MAV_MISSION_TYPE.FENCE || value === MAV_MISSION_TYPE.RALLY) {
+    return value;
+  }
+  return MAV_MISSION_TYPE.MISSION;
+}
+
+export const MISSION_DATA_TYPE_LABELS: Record<MissionDataType, string> = {
+  [MAV_MISSION_TYPE.MISSION]: 'Waypoints',
+  [MAV_MISSION_TYPE.FENCE]: 'Geo-Fence',
+  [MAV_MISSION_TYPE.RALLY]: 'Rally Points',
+};
+
+export const MISSION_DATA_TYPE_TABS: { value: MissionDataType; label: string }[] = [
+  { value: MAV_MISSION_TYPE.MISSION, label: MISSION_DATA_TYPE_LABELS[0] },
+  { value: MAV_MISSION_TYPE.FENCE, label: MISSION_DATA_TYPE_LABELS[1] },
+  { value: MAV_MISSION_TYPE.RALLY, label: MISSION_DATA_TYPE_LABELS[2] },
+];
+
+export function createEmptyMissionsByType(): Record<MissionDataType, WaypointItem[]> {
+  return {
+    [MAV_MISSION_TYPE.MISSION]: [],
+    [MAV_MISSION_TYPE.FENCE]: [],
+    [MAV_MISSION_TYPE.RALLY]: [],
+  };
+}
 
 /** Single mission item (maps to future MISSION_ITEM_INT fields) */
 export interface WaypointItem {
@@ -63,7 +100,8 @@ export interface WaypointItem {
 export interface GcsMissionDownloadPayload {
   targetSystem?: number;
   targetComponent?: number;
-  missionType?: number;
+  /** MAV_MISSION_TYPE — default 0 (mission) */
+  missionType?: MissionDataType | number;
 }
 
 /** Main → Renderer result for `datalink:mission:download` */
@@ -81,7 +119,7 @@ export interface GcsMissionPayload {
   /** MAVLink target_component — default 1 (autopilot) */
   targetComponent?: number;
   /** MAV_MISSION_TYPE — default 0 (mission) */
-  missionType?: number;
+  missionType?: MissionDataType | number;
 }
 
 /** Default altitude (m) when adding waypoints from the map editor */

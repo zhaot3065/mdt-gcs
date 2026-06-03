@@ -143,28 +143,42 @@ export function parseMissionCount(payload: Buffer): { count: number; missionType
 }
 
 /** MISSION_ITEM_INT (#38) — lat/lon int32 degrees × 1e7 → float degrees */
-export function parseMissionItemInt(payload: Buffer): WaypointItem | null {
+export function parseMissionItemInt(
+  payload: Buffer,
+): { item: WaypointItem; missionType: number } | null {
   if (payload.length < 38) return null;
   const lat = payload.readInt32LE(16) / 1e7;
   const lon = payload.readInt32LE(20) / 1e7;
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   return {
-    param1: payload.readFloatLE(0),
-    param2: payload.readFloatLE(4),
-    param3: payload.readFloatLE(8),
-    param4: payload.readFloatLE(12),
-    lat,
-    lon,
-    alt: payload.readFloatLE(24),
-    seq: payload.readUInt16LE(28),
-    command: payload.readUInt16LE(30),
+    item: {
+      param1: payload.readFloatLE(0),
+      param2: payload.readFloatLE(4),
+      param3: payload.readFloatLE(8),
+      param4: payload.readFloatLE(12),
+      lat,
+      lon,
+      alt: payload.readFloatLE(24),
+      seq: payload.readUInt16LE(28),
+      command: payload.readUInt16LE(30),
+    },
+    missionType: payload.readUInt8(37),
   };
 }
 
 /** MISSION_REQUEST (#40) — autopilot requests seq from GCS */
+export function parseMissionRequest(payload: Buffer): { seq: number; missionType: number } | null {
+  if (payload.length < 5) return null;
+  return {
+    seq: payload.readUInt16LE(2),
+    missionType: payload.readUInt8(4),
+  };
+}
+
+/** @deprecated use parseMissionRequest */
 export function parseMissionRequestSeq(payload: Buffer): number | null {
-  if (payload.length < 4) return null;
-  return payload.readUInt16LE(2);
+  const parsed = parseMissionRequest(payload);
+  return parsed?.seq ?? null;
 }
 
 /** MISSION_REQUEST_INT (#51) */

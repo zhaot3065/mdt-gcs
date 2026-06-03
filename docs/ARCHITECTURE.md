@@ -195,13 +195,13 @@ Preload: `window.gcs.vehicle.sendCommand(request)`.
 Defined in `shared/types/mission.ts`. Invoke `datalink:mission:upload` → **async** `Promise<GcsCommandResult>`.
 
 Main: `mission-egress.ts` — `MissionUploadSession` state machine:
-1. `encodeMissionCount()` → `sendFrameOnActiveLink`
-2. `bindMissionUploadToRouter()` listens for #40/#51/#47 (vehicle sysid/compid guard)
+1. `encodeMissionCount()` with `mission_type` → `sendFrameOnActiveLink`
+2. Router #40/#51/#47 — sysid/compid + **mission_type** guard
 3. `encodeMissionItemInt()` per requested seq (lat/lon × 1e7)
-4. `MISSION_ACK` type 0 → success; timeout 5s → `MISSION_UPLOAD_TIMEOUT`
+4. `MISSION_ACK` type 0 → success; timeout 5s
 5. Link teardown → `abortMissionUpload()`
 
-Renderer: `MissionListPanel` (▲/▼ reorder, `MISSION_CMD_OPTIONS` dropdown, HOME telemetry row, Save/Load JSON via `mission-file-io.ts`), `MissionMapLayers`, `MapHudOverlay` + `MapLayerToggle` in stacked `map-overlay-top-right`.
+Renderer: `MissionListPanel` tabs (Waypoints | Geo-Fence | Rally), `missionsByType` in `useMissionStore`, upload/download pass active `missionType`. `MissionMapLayers`: blue route / red closed fence / green rally markers.
 
 Mission file format: `MissionFileDocument` in `shared/types/mission.ts` — `{ version: 1, exportedAt, waypoints[] }`; no IPC (Blob download / FileReader import).
 
@@ -210,12 +210,11 @@ Mission file format: `MissionFileDocument` in `shared/types/mission.ts` — `{ v
 Invoke `datalink:mission:download` → **async** `Promise<GcsMissionDownloadResult>`.
 
 Main: `mission-download.ts` — `MissionDownloadSession` state machine:
-1. `encodeMissionRequestList()` (#43) → `sendFrameOnActiveLink`
-2. Router listens for #44 `MISSION_COUNT` → `totalCount`
-3. `encodeMissionRequestInt()` (#51) per seq; router #38 `MISSION_ITEM_INT` → `parseMissionItemInt` (lat/lon ÷ 1e7)
-4. All items received → GCS sends #47 `MISSION_ACK` type 0 → resolve `{ ok, waypoints }`
-5. Step timeout 5s; link teardown → `abortMissionDownload()`
-6. Upload/download mutex: `mission-transaction-lock.ts`
+1. `encodeMissionRequestList()` (#43) with `mission_type`
+2. Router #44 `MISSION_COUNT` — **mission_type** filter → `totalCount`
+3. `encodeMissionRequestInt()` (#51); router #38 `MISSION_ITEM_INT` — type filter, lat/lon ÷ 1e7
+4. GCS #47 `MISSION_ACK` → resolve `{ ok, waypoints }` into `missionsByType[missionType]`
+5. Step timeout 5s; mutex via `mission-transaction-lock.ts`
 
 Preload: `window.gcs.mission.download(payload?)`. Renderer: `MissionListPanel` **Download Mission** button → `useMissionStore.downloadMission()` replaces `waypoints` → `MissionMapLayers` auto-refresh.
 
