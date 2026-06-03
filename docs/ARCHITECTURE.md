@@ -159,6 +159,12 @@ Renderer: `FlightModeSelector` — dropdown + confirm modal; `customMode` in `Gc
 
 Preload: `window.gcs.vehicle.sendCommand(request)`.
 
+### H16 serial connect
+
+- Invoke: `datalink:serial:list` → `SerialPortInfo[]`; `h16:connect` / `h16:disconnect`
+- UI: `src/features/datalink/components/H16ConnectPanel.tsx` — default baud `57600`
+- Preload: `window.gcs.datalink.getSerialPorts()`, `connectH16`, `disconnectH16`
+
 ---
 
 ## 5. UDP receive path (Main Process)

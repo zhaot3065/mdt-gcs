@@ -261,17 +261,13 @@ Renderer: window.gcs.vehicle.sendCommand({ command: 'arm'|'disarm'|'rtl' })
 
 **B. HUD overlay on map**
 
-> Parse TIMESYNC in Main, inject `MavlinkRouter({ rttProvider })`, surface in router snapshot.
-
-**C. HUD overlay on map**
-
 > Attitude/airspeed HUD using `useVehicleStore` + future ATTITUDE parse.
 
-**D. Mission planner**
+**C. Mission planner**
 
 > Mission items egress via same active-link guard; extend `GcsCommandType` as needed.
 
-**E. Extend telemetry**
+**D. Extend telemetry**
 
 > Add ATTITUDE, GPS_RAW_INT to `mavlink-parser.ts`; extend `VehicleState` in `shared/types/vehicle.ts` first.
 
