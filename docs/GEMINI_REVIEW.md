@@ -3,13 +3,13 @@
 > **Repo:** https://github.com/zhaot3065/mdt-gcs  
 > **Branch:** `main`  
 > **Purpose:** Paste this document (or sections) into Gemini when you cannot clone the repo.  
-> **Last updated:** 2026-06-03 — MavlinkRouter + Vehicle telemetry pipeline
+> **Last updated:** 2026-06-03 — + Hybrid map (gcs-tiles + Leaflet)
 
 ---
 
 ## 1. Project summary (one paragraph)
 
-**MDT GCS** is an Electron + React ground control station for ArduPilot multicopters/VTOL with **dual datalinks** (SprintLink Ethernet + H16 USB serial). All I/O and MAVLink processing run in **Main**; React consumes IPC only. **MavlinkRouter** deduplicates frames and picks an active link. **MavlinkTelemetryParser** subscribes to router `frame` events, decodes HEARTBEAT / GLOBAL_POSITION_INT / SYS_STATUS / VFR_HUD into **`VehicleState`**, and broadcasts to the UI every **150 ms**. UI: dark theme, link signal lamps, router panel, **VehicleMonitorPanel** (Tailwind gauges).
+**MDT GCS** is an Electron + React GCS for ArduPilot with dual datalinks, **MavlinkRouter**, **VehicleState** telemetry (150 ms), and a **hybrid map**: online OpenStreetMap or offline tiles via custom protocol **`gcs-tiles://`** served from `userData/maps/`. Leaflet map shows vehicle position/heading from `useVehicleStore` with multicopter/VTOL SVG marker.
 
 ---
 
@@ -19,7 +19,8 @@
 |-------|--------|
 | Shell | Electron 36 |
 | UI | React 19 + Vite 6 + **Tailwind CSS v4** |
-| State | Zustand 5 — `features/datalink`, `features/vehicle` |
+| State | Zustand — `features/datalink`, `features/vehicle`, `features/map` |
+| Map | Leaflet + react-leaflet |
 | Serial | `serialport` 13 (Main only) |
 | Protocol | Hand-rolled MAVLink v1/v2 frame parse in Main |
 
@@ -36,7 +37,8 @@ MDT_GCS/
 │   └── GEMINI_REVIEW.md          # This file
 ├── shared/types/
 │   ├── datalink.ts               # DatalinkIpcPayload — change first for link IPC
-│   └── vehicle.ts                # VehicleState — change first for telemetry IPC
+│   ├── vehicle.ts                # VehicleState — telemetry IPC
+│   └── map.ts                    # Tile URLs, map mode constants
 ├── electron/connection/
 │   ├── connection-manager.ts
 │   ├── mavlink-router.ts         # Dedup + active link + 'frame' event
@@ -46,7 +48,12 @@ MDT_GCS/
 │   └── udp / tcp / serial transports
 └── src/features/
     ├── datalink/                 # useDatalinkFeatureStore, RouterStatusPanel
-    └── vehicle/                  # useVehicleStore, VehicleMonitorPanel
+    ├── vehicle/                  # useVehicleStore, VehicleMonitorPanel
+    └── map/                      # useMapStore, MapDisplay, gcs-tiles layer
+```
+
+```
+electron/protocol/gcs-tiles-protocol.ts  # protocol.handle → userData/maps
 ```
 
 **Preload:** `window.gcs.datalink.*` + `window.gcs.vehicle.onState(cb)`
@@ -108,6 +115,24 @@ interface VehicleState {
 
 **Security:** No `Buffer` over IPC. `contextIsolation: true`.
 
+### 4c. Hybrid map (no IPC — custom protocol only)
+
+| Mode | Leaflet tile URL | Backend |
+|------|------------------|---------|
+| Online | `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png` | Internet (Starlink) |
+| Offline | `gcs-tiles://{z}/{x}/{y}.png` | Main `protocol.handle` |
+
+**Main setup (`electron/main.ts`):**
+
+1. `registerGcsTilesScheme()` — before `app.whenReady()`
+2. `ensureOfflineMapsDir()` + `setupGcsTilesHandler()` — inside ready
+
+**Tile files:** `{userData}/maps/{z}/{x}/{y}.png` (Windows: `%APPDATA%/mdt-gcs/maps/...`). Missing file → dark placeholder PNG.
+
+**Renderer:** `useMapStore.tileMode` (`online` | `offline`), `MapDisplay` + `MapLayerToggle`, marker from `useVehicleStore` (lat/lon/heading, SVG rotate 150ms).
+
+**Constants:** `shared/types/map.ts`
+
 ---
 
 ## 5. Main process pipelines
@@ -142,10 +167,11 @@ MavlinkRouter 'frame' → MavlinkTelemetryParser
 |-------|------|-----|
 | Datalink | `useDatalinkFeatureStore` | `gcs.datalink.onPayload` |
 | Vehicle | `useVehicleStore` | `gcs.vehicle.onState` |
+| Map | `useMapStore` | (local only — tile mode toggle) |
 
-`App.tsx` mounts both subscriptions on load.
+`App.tsx` mounts datalink + vehicle IPC on load.
 
-**UI:** `DatalinkStatusBar`, `EthernetConnectPanel`, `RouterStatusPanel`, `VehicleMonitorPanel` (Tailwind).
+**UI:** `MapDisplay` (main), `DatalinkStatusBar`, `VehicleMonitorPanel`, `EthernetConnectPanel`, `RouterStatusPanel`, `MapLayerToggle`.
 
 ---
 
@@ -156,6 +182,7 @@ MavlinkRouter 'frame' → MavlinkTelemetryParser
 | v0.1 | Electron scaffold, dual transport, link metrics UI |
 | Router | MavlinkRouter, DatalinkIpcPayload, features/datalink |
 | Telemetry | vehicle.ts, mavlink-parser, features/vehicle, Tailwind |
+| Map | gcs-tiles protocol, Leaflet, features/map |
 
 ---
 
@@ -167,7 +194,9 @@ MavlinkRouter 'frame' → MavlinkTelemetryParser
 | Telemetry parser (4 msg types) | Full MAVLink dialect / mission protocol |
 | Vehicle IPC + monitor UI | H16 connect UI panel |
 | ArduPilot flight mode strings | TIMESYNC RTT |
-| Tailwind vehicle gauges | Map, HUD, mission planner |
+| Tailwind vehicle gauges | Mission planner |
+| Hybrid map (OSM + gcs-tiles) | Command egress on active link |
+| Leaflet + vehicle marker | H16 connect UI |
 | TIMESYNC hook on router (`rttProvider`) | Wired |
 
 ---
@@ -186,9 +215,9 @@ MavlinkRouter 'frame' → MavlinkTelemetryParser
 
 > Parse TIMESYNC in Main, inject `MavlinkRouter({ rttProvider })`, surface in `MavlinkRouterSnapshot.rtt`.
 
-**D. Map / HUD**
+**D. HUD overlay**
 
-> Consume `useVehicleStore` in `src/features/map` or `hud` — lat/lon/heading/alt/battery; keep IPC read-only in Renderer.
+> Add attitude/airspeed HUD overlay on map using `useVehicleStore` vfrHud + future ATTITUDE parse.
 
 **E. Extend telemetry**
 
@@ -222,18 +251,23 @@ DEDUP_TTL_MS = 2000
 
 ```text
 Repo: https://github.com/zhaot3065/mdt-gcs (main)
-Stack: Electron+React+Zustand+Tailwind. ArduPilot GCS, dual link (ethernet + h16_rf).
+Stack: Electron+React+Zustand+Tailwind+Leaflet. ArduPilot GCS, dual link (ethernet + h16_rf).
 
 IPC:
-- datalink:snapshot → DatalinkIpcPayload (links + router), 200ms
-- vehicle:state → VehicleState, 150ms throttled
+- datalink:snapshot → DatalinkIpcPayload, 200ms
+- vehicle:state → VehicleState, 150ms
 
-Main: ConnectionManager → stats + MavlinkRouter (dedup) → MavlinkTelemetryParser (HB/GPS_INT/SYS_STATUS/VFR_HUD)
+Map (no IPC):
+- Online: OpenStreetMap tiles
+- Offline: gcs-tiles://{z}/{x}/{y}.png → userData/maps/{z}/{x}/{y}.png
 
-Renderer: useDatalinkFeatureStore, useVehicleStore, VehicleMonitorPanel
+Main: dual transport → MavlinkRouter (dedup) → MavlinkTelemetryParser → vehicle:state
+     + protocol.handle gcs-tiles for offline tiles
 
-Next: active-link command egress, H16 UI, TIMESYNC, map/HUD.
-Full detail: docs/GEMINI_REVIEW.md in repo.
+Renderer: useDatalinkFeatureStore, useVehicleStore, useMapStore, MapDisplay (vehicle marker)
+
+Next: command egress (active link), H16 UI, TIMESYNC, HUD overlay on map.
+Paste full spec: docs/GEMINI_REVIEW.md
 ```
 
 ---

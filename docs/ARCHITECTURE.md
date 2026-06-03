@@ -27,9 +27,11 @@ MDT_GCS/
 ├── shared/
 │   └── types/
 │       ├── datalink.ts          # IPC contracts, DatalinkSnapshot (main + renderer)
-│       └── vehicle.ts           # VehicleState + vehicle:state IPC
+│       ├── vehicle.ts           # VehicleState + vehicle:state IPC
+│       └── map.ts               # Tile URLs + map mode constants
 ├── electron/                    # MAIN PROCESS — privileged I/O
-│   ├── main.ts                  # Window + IPC registration
+│   ├── main.ts                  # Window + IPC + gcs-tiles protocol
+│   ├── protocol/gcs-tiles-protocol.ts  # Offline tile handler
 │   ├── preload.ts               # contextBridge → window.gcs
 │   └── connection/
 │       ├── connection-manager.ts
@@ -48,6 +50,9 @@ MDT_GCS/
 │   ├── features/vehicle/
 │   │   ├── store/use-vehicle-store.ts
 │   │   └── components/VehicleMonitorPanel.tsx
+│   ├── features/map/
+│   │   ├── store/use-map-store.ts
+│   │   └── components/MapDisplay.tsx
 │   ├── stores/
 │   │   └── datalink-store.ts    # Re-export shim → features/datalink
 │   ├── components/
@@ -63,7 +68,6 @@ MDT_GCS/
 **Planned growth**:
 
 ```
-src/features/map/
 src/features/mission/
 electron/connection/timesync-rtt.ts   # TIMESYNC → MavlinkRouter.rttProvider
 ```
@@ -131,6 +135,17 @@ Defined in `shared/types/datalink.ts`:
 **Rule:** Never pass raw `Buffer` or sockets to the renderer. Only serializable snapshots and connect options.
 
 **Preload:** `window.gcs.vehicle.onState(handler)` mirrors datalink payload subscription.
+
+### Hybrid map (no extra IPC)
+
+| Mode | Tile URL | Source |
+|------|----------|--------|
+| Online | `https://{s}.tile.openstreetmap.org/...` | Internet (Starlink) |
+| Offline | `gcs-tiles://{z}/{x}/{y}.png` | Main `protocol.handle` → `userData/maps/{z}/{x}/{y}.png` |
+
+Register `gcs-tiles` via `registerSchemesAsPrivileged` **before** `app.whenReady()`, then `setupGcsTilesHandler()` inside ready. Missing tiles return a dark placeholder PNG (404).
+
+Renderer: Leaflet + `useVehicleStore` marker + `useMapStore` tile mode toggle.
 
 ---
 

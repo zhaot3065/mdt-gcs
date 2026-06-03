@@ -1,0 +1,23 @@
+.map-display .map-leaflet {
+  background: #0a0c10;
+  border: 1px solid var(--border, #2e3a52);
+}
+
+.map-display .leaflet-control-attribution {
+  background: rgba(10, 12, 16, 0.85) !important;
+  color: #9fb0cc !important;
+  font-size: 10px;
+}
+
+.map-display .leaflet-control-attribution a {
+  color: #3d9eff;
+}
+
+.vehicle-leaflet-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.vehicle-icon-root {
+  pointer-events: none;
+}

@@ -3,11 +3,18 @@ import path from 'node:path';
 import { ConnectionManager } from './connection/connection-manager';
 import { MavlinkTelemetryParser } from './connection/mavlink-parser';
 import {
+  registerGcsTilesScheme,
+  setupGcsTilesHandler,
+  ensureOfflineMapsDir,
+} from './protocol/gcs-tiles-protocol';
+import {
   IPC_CHANNELS,
   type EthernetConnectOptions,
   type SerialConnectOptions,
 } from '../shared/types/datalink';
 import { VEHICLE_BROADCAST_MS } from '../shared/types/vehicle';
+
+registerGcsTilesScheme();
 
 const isDev = !app.isPackaged;
 let mainWindow: BrowserWindow | null = null;
@@ -69,7 +76,9 @@ function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.LIST_SERIAL_PORTS, () => connectionManager.listSerialPorts());
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await ensureOfflineMapsDir();
+  setupGcsTilesHandler();
   registerIpc();
   createWindow();
 
