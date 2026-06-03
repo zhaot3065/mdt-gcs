@@ -26,7 +26,11 @@ import { TcpClientTransport } from './tcp-socket';
 
 import { SerialTransport } from './serial-port';
 import { sendCommandOnActiveLink } from './command-egress';
-import { uploadMissionOnActiveLink } from './mission-egress';
+import {
+  abortMissionUpload,
+  bindMissionUploadToRouter,
+  uploadMissionOnActiveLink,
+} from './mission-egress';
 import type { GcsMissionPayload } from '../../shared/types/mission';
 
 
@@ -64,6 +68,10 @@ export class ConnectionManager {
     rttSlotProvider: (id) => this.timesync.getSlot(id),
     rttProvider: (id) => this.timesync.getRttMs(id),
   });
+
+  constructor() {
+    bindMissionUploadToRouter(this.router);
+  }
 
 
 
@@ -314,9 +322,9 @@ export class ConnectionManager {
   }
 
   /**
-   * Mission upload stub: MISSION_COUNT on active link (MISSION_ITEM loop — later).
+   * Mission upload: MISSION_COUNT handshake through MISSION_ACK.
    */
-  uploadMission(payload: GcsMissionPayload): GcsCommandResult {
+  uploadMission(payload: GcsMissionPayload): Promise<GcsCommandResult> {
     return uploadMissionOnActiveLink(this.egressContext(), payload);
   }
 
@@ -382,6 +390,7 @@ export class ConnectionManager {
     link.transport = undefined;
     link.endpoint = undefined;
     this.timesync.resetLink(link.id);
+    abortMissionUpload(`Link "${link.id}" disconnected during mission upload.`);
   }
 
   private runTimesyncPings(): void {

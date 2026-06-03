@@ -3,6 +3,24 @@
   border: 1px solid var(--border, #2e3a52);
 }
 
+/** Map source + HUD — stacked to avoid overlap */
+.map-overlay-top-right {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  max-width: min(100% - 1.5rem, 320px);
+  pointer-events: none;
+}
+
+.map-overlay-top-right > * {
+  pointer-events: auto;
+}
+
 .map-display .leaflet-control-attribution {
   background: rgba(10, 12, 16, 0.85) !important;
   color: #9fb0cc !important;

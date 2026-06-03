@@ -154,7 +154,7 @@ export function MissionListPanel() {
             }`}
           >
             {lastUploadResult.ok
-              ? `OK · ${lastUploadResult.activeLinkId} · MISSION_COUNT (${lastUploadResult.missionItemCount} wp) · ${lastUploadResult.bytesSent} B`
+              ? `OK · ${lastUploadResult.activeLinkId} · ${lastUploadResult.missionItemCount} wp · ${lastUploadResult.bytesSent} B`
               : `FAIL · ${lastUploadResult.errorCode}: ${lastUploadResult.error}`}
           </p>
         )}

@@ -171,17 +171,18 @@ Renderer: `FlightModeSelector` — dropdown + confirm modal; `customMode` in `Gc
 
 Preload: `window.gcs.vehicle.sendCommand(request)`.
 
-### Mission upload (stub — active link only)
+### Mission upload (active link egress + router frame handshake)
 
-Defined in `shared/types/mission.ts`. Invoke `datalink:mission:upload` with `GcsMissionPayload` (`items: WaypointItem[]`).
+Defined in `shared/types/mission.ts`. Invoke `datalink:mission:upload` → **async** `Promise<GcsCommandResult>`.
 
-Main path: `mission-egress.ts` → `sendFrameOnActiveLink()` (same guard as commands) → `encodeMissionCount()` (MAVLink #44). Announces waypoint count only; **MISSION_ITEM_INT handshake is a later phase**.
+Main: `mission-egress.ts` — `MissionUploadSession` state machine:
+1. `encodeMissionCount()` → `sendFrameOnActiveLink`
+2. `bindMissionUploadToRouter()` listens for #40/#51/#47 (vehicle sysid/compid guard)
+3. `encodeMissionItemInt()` per requested seq (lat/lon × 1e7)
+4. `MISSION_ACK` type 0 → success; timeout 5s → `MISSION_UPLOAD_TIMEOUT`
+5. Link teardown → `abortMissionUpload()`
 
-Renderer: `useMissionStore` — `isEditMode`, `waypoints`, CRUD actions, `uploadMission()`.
-
-UI: `MissionListPanel` (sidebar), `MissionMapLayers` in `MapDisplay` (click/drag/polyline), `MissionUploadConfirmModal`.
-
-Preload: `window.gcs.mission.upload(payload)`.
+Renderer: `MissionListPanel`, `MissionMapLayers`, `MapHudOverlay` + `MapLayerToggle` in stacked `map-overlay-top-right`.
 
 ### H16 serial connect
 

@@ -3,7 +3,7 @@
 > **Repo:** https://github.com/zhaot3065/mdt-gcs  
 > **Branch:** `main`  
 > **Purpose:** Paste this document (or sections) into Gemini when you cannot clone the repo.  
-> **Last updated:** 2026-06-04 — + Map mission editor UI + electron:dev single-instance fix
+> **Last updated:** 2026-06-04 — + MISSION_ITEM handshake + map overlay layout fix
 
 ---
 
@@ -243,25 +243,27 @@ Renderer: window.gcs.vehicle.sendCommand({ command: 'arm'|'disarm'|'rtl' })
 
 **UI:** `VehicleCommandControls` + confirm modal before send.
 
-### Pipeline D — Mission upload (stub)
+### Pipeline D — Mission upload (full handshake)
 
 ```
-Renderer: useMissionStore.uploadMission()
+Renderer: useMissionStore.uploadMission()  [Promise — awaits ACK]
   → window.gcs.mission.upload(GcsMissionPayload)
   → ipc invoke datalink:mission:upload
-  → ConnectionManager.uploadMission
-  → mission-egress → sendFrameOnActiveLink (same guard as commands)
-  → mavlink-mission: encode MISSION_COUNT (#44, count = items.length)
-  → active transport.send(buffer) ONLY
+  → ConnectionManager.uploadMission (async)
+  → mission-egress MissionUploadSession:
+      1. sendFrameOnActiveLink → MISSION_COUNT (#44)
+      2. router 'frame' → MISSION_REQUEST (#40) / MISSION_REQUEST_INT (#51)
+         guard: sysid/compid match target vehicle
+      3. sendFrameOnActiveLink → MISSION_ITEM_INT (#38) per seq
+         lat/lon × 1e7 int32, alt float, MAV_FRAME_GLOBAL_RELATIVE_ALT
+      4. MISSION_ACK (#47) type=0 → resolve { ok: true, missionItemCount }
+      5. Step timeout 5s → MISSION_UPLOAD_TIMEOUT
+  → egress always on active link; ingress ACK/REQUEST on any deduped frame from vehicle
 ```
 
-**Not yet:** MISSION_REQUEST / MISSION_ITEM_INT handshake loop in Main.
-
-**Map mission editor (done):**
-- `useMissionStore.isEditMode` — toggle from `MissionListPanel`
-- Map click (Edit ON) → `addWaypoint(lat, lon, alt=100m)`
-- `MissionMapLayers`: numbered markers, Polyline route, draggable markers → `updateWaypoint`
-- `MissionListPanel`: seq/cmd/alt table, Remove, Clear All, Upload + `MissionUploadConfirmModal`
+**Map mission editor:**
+- `useMissionStore.isEditMode`, `MissionMapLayers`, `MissionListPanel`, upload confirm modal
+- Map overlay: `map-overlay-top-right` stacks Map source + HUD (no overlap)
 
 ---
 
@@ -296,9 +298,11 @@ Renderer: useMissionStore.uploadMission()
 | TIMESYNC RTT | `timesync-rtt.ts` + router `rttSlotProvider` + UI RTT display |
 | Electron build | `main.cjs` / `preload.cjs`; `serialport` external + CJS lib format |
 | Map HUD | `MapHudOverlay` + ATTITUDE parse |
-| Mission foundation | `mission.ts`, `useMissionStore`, MISSION_COUNT stub |
-| Map mission editor | Edit mode, markers, polyline, drag, list panel, upload confirm |
-| Dev fix | `electron:dev` = `vite` only (no duplicate Electron windows) |
+| Mission foundation | `mission.ts`, `useMissionStore`, MISSION_COUNT |
+| Map mission editor | Edit mode, markers, polyline, list panel, upload confirm |
+| Mission handshake | `MissionUploadSession` — COUNT→REQUEST→ITEM_INT→ACK |
+| Dev fix | `electron:dev` = `vite` only |
+| Map UI | HUD + map source stacked top-right |
 
 **Build note:** `package.json` has `"type":"module"` — Main/Preload must be **`.cjs`** + `lib.formats: ['cjs']` in `vite.config.ts` so `serialport` native bindings and `__dirname` work.
 
@@ -308,31 +312,22 @@ Renderer: useMissionStore.uploadMission()
 
 | Done | Not yet |
 |------|---------|
-| Dual link + router + dedup | Full MISSION_ITEM upload handshake |
-| Command egress (arm/disarm/rtl/set_mode) | Geo-fence / rally |
-| Flight mode dropdown + confirm | Full MAVLink dialect |
-| Telemetry (5 msg types incl. ATTITUDE) | GPS_RAW_INT, BATTERY_STATUS |
-| H16 serial connect UI | — |
-| Vehicle IPC + monitor UI | — |
-| Hybrid map + HUD overlay | — |
-| TIMESYNC RTT + toolbar RTT display | — |
-| Mission types + Zustand + MISSION_COUNT stub | MISSION_ITEM_INT handshake (Main) |
-| Map waypoint editor + upload confirm UI | Geo-fence / rally missions |
-| Active-link guard reused for mission egress | Full MAVLink dialect |
+| Dual link + router + dedup + TIMESYNC RTT | Geo-fence / rally missions |
+| Command egress + mission upload handshake | Full MAVLink dialect |
+| Map mission editor + MISSION_ITEM_INT Main | GPS_RAW_INT, BATTERY_STATUS |
+| Map HUD (SPD/ALT/HDG/VS + attitude horizon) | Mission reorder / command type UI |
+| H16 + Ethernet connect UI | Persist mission JSON |
+| Vehicle telemetry + commands | SITL integration tests in CI |
 
 ---
 
 ## 9. Suggested next prompts for Gemini
 
-**A. MISSION_ITEM handshake (Main — priority)**
+**A. Mission UX polish (priority)**
 
-> After MISSION_COUNT, implement `MISSION_REQUEST` / `MISSION_ITEM_INT` state machine in `mission-egress.ts`; listen on router frames for autopilot requests.
+> Reorder waypoints, command dropdown (TAKEOFF/LAND/RTL), HOME wp, save/load mission JSON.
 
-**B. Mission UX polish**
-
-> Reorder waypoints, command type dropdown (TAKEOFF/LAND), home WP, persist mission JSON.
-
-**C. Extend telemetry**
+**B. Extend telemetry**
 
 > Add GPS_RAW_INT, BATTERY_STATUS to `mavlink-parser.ts`; extend `shared/types/vehicle.ts` first.
 
@@ -371,21 +366,17 @@ IPC in:
 - datalink:snapshot → DatalinkIpcPayload, 200ms (router.rtt: TIMESYNC preferred)
 - vehicle:state → VehicleState, 150ms (incl. attitude for HUD)
 
-IPC out (egress, active link only):
-- datalink:send-command → arm|disarm|rtl|set_mode → GcsCommandResult
-- datalink:mission:upload → GcsMissionPayload → GcsCommandResult (MISSION_COUNT stub today)
-- Preload: window.gcs.vehicle.sendCommand, window.gcs.mission.upload
+IPC out:
+- datalink:send-command → arm|disarm|rtl|set_mode
+- datalink:mission:upload → GcsMissionPayload → Promise<GcsCommandResult>
+  (MISSION_COUNT → MISSION_ITEM_INT* → MISSION_ACK handshake)
 
-Main pipelines:
-- transport → timesync-rtt → router dedup → mavlink-parser → vehicle:state
-- send-command / mission:upload → sendFrameOnActiveLink guard → active transport.send
+Renderer: mission editor on map + MissionListPanel; HUD SPD/ALT/HDG/VS
 
-Renderer stores: datalink, vehicle, map (+ HUD), mission (edit mode, waypoints, upload confirm)
+Done: TIMESYNC RTT, mission upload handshake, map editor, overlay layout fix.
+Next: mission UX polish, telemetry extensions.
 
-Done: TIMESYNC RTT, CJS build, map HUD, mission editor UI, MISSION_COUNT stub.
-Next: MISSION_ITEM_INT handshake in Main.
-
-Paste full spec: docs/GEMINI_REVIEW.md + docs/ARCHITECTURE.md
+Paste: docs/GEMINI_REVIEW.md + docs/ARCHITECTURE.md
 ```
 
 ---

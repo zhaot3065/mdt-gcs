@@ -12,7 +12,7 @@ export function MapLayerToggle() {
 
   return (
     <div
-      className="absolute top-3 right-3 z-[1000] flex flex-col gap-1 rounded-lg border border-slate-600 bg-slate-900/95 p-2 shadow-lg backdrop-blur-sm"
+      className="map-layer-toggle flex flex-col gap-1 rounded-lg border border-slate-600 bg-slate-900/95 p-2 shadow-lg backdrop-blur-sm"
       role="group"
       aria-label="Map tile source"
     >

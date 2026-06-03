@@ -129,8 +129,10 @@ export function MapDisplay() {
         <MissionMapLayers />
       </MapContainer>
 
-      <MapLayerToggle />
-      <MapHudOverlay />
+      <div className="map-overlay-top-right">
+        <MapLayerToggle />
+        <MapHudOverlay />
+      </div>
 
       {!connected && (
         <div className="pointer-events-none absolute bottom-3 left-3 z-[1000] rounded-md bg-slate-900/90 px-2 py-1 text-xs text-slate-400 ring-1 ring-slate-600">

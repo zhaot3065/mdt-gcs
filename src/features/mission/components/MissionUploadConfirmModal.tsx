@@ -28,8 +28,8 @@ export function MissionUploadConfirmModal({
           총 {waypointCount}개의 웨이포인트 미션
         </p>
         <p className="mt-2 text-sm text-slate-300">
-          드론으로 미션을 업로드합니다. MISSION_COUNT가 활성 링크로 전송됩니다. (전체
-          MISSION_ITEM 핸드셰이크는 다음 단계)
+          드론으로 미션을 업로드합니다. MISSION_COUNT → MISSION_ITEM_INT → MISSION_ACK
+          핸드셰이크가 활성 링크로 수행됩니다.
         </p>
         <p className="mt-3 text-xs text-slate-500">
           활성 링크로만 전송됩니다:{' '}
