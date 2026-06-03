@@ -4,7 +4,7 @@
   "description": "ArduPilot GCS with dual datalink (H16 RF + SprintLink Ethernet) — Electron + React",
   "private": false,
   "type": "module",
-  "main": "dist-electron/main.js",
+  "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.node.json && vite build && tsc -p tsconfig.electron.json",

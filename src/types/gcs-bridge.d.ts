@@ -1,16 +1,16 @@
 import type {
-  DatalinkSnapshot,
+  DatalinkIpcPayload,
   EthernetConnectOptions,
   SerialConnectOptions,
 } from '@shared/types/datalink';
 
 export interface GcsBridgeApi {
   datalink: {
-    onSnapshot: (handler: (snapshots: DatalinkSnapshot[]) => void) => () => void;
-    connectEthernet: (opts: EthernetConnectOptions) => Promise<DatalinkSnapshot[]>;
-    disconnectEthernet: () => Promise<DatalinkSnapshot[]>;
-    connectH16: (opts: SerialConnectOptions) => Promise<DatalinkSnapshot[]>;
-    disconnectH16: () => Promise<DatalinkSnapshot[]>;
+    onPayload: (handler: (payload: DatalinkIpcPayload) => void) => () => void;
+    connectEthernet: (opts: EthernetConnectOptions) => Promise<DatalinkIpcPayload>;
+    disconnectEthernet: () => Promise<DatalinkIpcPayload>;
+    connectH16: (opts: SerialConnectOptions) => Promise<DatalinkIpcPayload>;
+    disconnectH16: () => Promise<DatalinkIpcPayload>;
     listSerialPorts: () => Promise<{ path: string; manufacturer?: string }[]>;
   };
 }

@@ -34,12 +34,17 @@ MDT_GCS/
 │       ├── connection-manager.ts
 │       ├── mavlink-stats.ts
 │       ├── link-quality.ts
+│       ├── mavlink-router.ts    # Dedup + active link selection
+│       ├── mavlink-frame.ts     # Shared frame parser
 │       ├── udp-socket.ts
 │       ├── tcp-socket.ts
 │       └── serial-port.ts
 ├── src/                         # RENDERER — React UI
+│   ├── features/datalink/
+│   │   ├── store/use-datalink-store.ts
+│   │   └── components/RouterStatusPanel.tsx
 │   ├── stores/
-│   │   └── datalink-store.ts    # Zustand (recommended over Redux for this scale)
+│   │   └── datalink-store.ts    # Re-export shim → features/datalink
 │   ├── components/
 │   │   ├── toolbar/             # DatalinkStatusBar, SignalLamp
 │   │   └── connection/        # EthernetConnectPanel
@@ -50,12 +55,12 @@ MDT_GCS/
 └── package.json
 ```
 
-**Planned growth** (not yet implemented):
+**Planned growth**:
 
 ```
 src/features/map/
 src/features/mission/
-electron/mavlink/router.ts       # Fan-in / priority when both links active
+electron/connection/timesync-rtt.ts   # TIMESYNC → MavlinkRouter.rttProvider
 ```
 
 ---
@@ -70,11 +75,14 @@ flowchart LR
     TCP[TcpClientTransport]
     SER[SerialTransport]
     STATS[MavlinkStreamStats x2]
+    RTR[MavlinkRouter]
     CM --> UDP
     CM --> TCP
     CM --> SER
     UDP --> STATS
+    UDP --> RTR
     SER --> STATS
+    SER --> RTR
   end
 
   subgraph Preload["Preload (contextBridge)"]
@@ -88,7 +96,7 @@ flowchart LR
   end
 
   CM -->|ipcMain.handle| API
-  CM -->|webContents.send 200ms| API
+  CM -->|DatalinkIpcPayload 200ms| API
   API --> ZS
   UI -->|invoke connect/disconnect| API
 ```
@@ -107,7 +115,7 @@ Defined in `shared/types/datalink.ts`:
 
 | Channel | Direction | Purpose |
 |---------|-----------|---------|
-| `datalink:snapshot` | Main → Renderer (event, ~200 ms) | `DatalinkSnapshot[]` metrics push |
+| `datalink:snapshot` | Main → Renderer (event, ~200 ms) | `DatalinkIpcPayload` — `links[]` + `router` |
 | `datalink:ethernet:connect` | Renderer → Main (invoke) | Open UDP/TCP with options |
 | `datalink:ethernet:disconnect` | invoke | Tear down ethernet transport |
 | `datalink:h16:connect` | invoke | Open serial port |
@@ -122,10 +130,10 @@ Defined in `shared/types/datalink.ts`:
 
 1. `UdpTransport` binds or connects (`udp-client` / `udp-server`).
 2. `socket.on('message')` emits `data` chunks.
-3. `ConnectionManager` routes chunks to the link’s `MavlinkStreamStats.ingest()`.
-4. Timer (`METRICS_INTERVAL_MS = 200`) builds `DatalinkSnapshot[]` and `webContents.send(DATALINK_SNAPSHOT)`.
-5. Preload forwards to `window.gcs.datalink.onSnapshot`.
-6. Zustand `subscribeIpc()` updates `snapshots` → toolbar re-renders.
+3. `ConnectionManager` routes each chunk to **both** `MavlinkStreamStats.ingest()` (per-link metrics) and `MavlinkRouter.ingest()` (dedup + fan-in).
+4. Timer builds `DatalinkIpcPayload` (links + router snapshot) and `webContents.send(DATALINK_SNAPSHOT)`.
+5. Preload → `window.gcs.datalink.onPayload`.
+6. Zustand `useDatalinkFeatureStore.subscribeIpc()` → toolbar + `RouterStatusPanel`.
 
 ### Default port
 
@@ -157,26 +165,40 @@ await window.gcs.datalink.connectEthernet({ mode, host, port });
 // → immediate snapshot return from invoke + ongoing push every 200ms
 
 // UI reads
-const snapshots = useDatalinkStore(s => s.snapshots);
+const { links, router } = useDatalinkFeatureStore(s => s.payload);
 ```
 
 Ethernet form state (`host`, `port`, `mode`) lives in Zustand so the mini panel and future persistence share one source.
 
 ---
 
-## 8. Dual-link strategy (roadmap)
+## 8. MavlinkRouter (implemented)
 
-Current scaffold: **monitor both links independently**. Next steps for ArduPilot GCS:
+`electron/connection/mavlink-router.ts`:
 
-1. **MavlinkRouter** in Main: dedupe by `(sysid, compid, msgid, seq)` when the same packet arrives on both links.
-2. **Active link selection**: prefer Ethernet when `quality === 'good'`, fall back to H16 RF.
-3. **Command egress**: send commands only on the selected link; optional hot-standby heartbeat on backup.
+| Concern | Implementation |
+|---------|----------------|
+| Dedup key | `(sysid, compid, msgid, seq)` with 2 s TTL cache |
+| Active link | Score = freshness + low loss + low latency; Ethernet wins ties within bias |
+| Failover | If Ethernet stale (`lastPacketAgeMs` ≥ 3 s) but H16 live → `stale_failover` |
+| RTT | `RttEstimate` with `heartbeat_proxy` today; inject `rttProvider` for TIMESYNC later |
+| Events | `frame` (unique forwarded), `active-link-changed` |
 
-Document this in the next prompt so implementation stays in Main, not React.
+**Next:** command egress only on `router.activeLinkId`; optional backup heartbeat.
+
+## 9. Dual-link IPC payload
+
+```typescript
+interface DatalinkIpcPayload {
+  links: DatalinkSnapshot[];  // each includes health.isActiveRoute
+  router: MavlinkRouterSnapshot;
+  updatedAt: number;
+}
+```
 
 ---
 
-## 9. Development commands
+## 10. Development commands
 
 ```bash
 npm install
@@ -189,7 +211,7 @@ Without Electron (`npm run dev` only), `window.gcs` is undefined — UI shows a 
 
 ---
 
-## 10. Sharing with Gemini / team
+## 11. Sharing with Gemini / team
 
 When generating the **next prompt**, include:
 

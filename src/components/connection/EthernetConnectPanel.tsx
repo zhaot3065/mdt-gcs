@@ -1,16 +1,16 @@
-import { useDatalinkStore } from '@/stores/datalink-store';
+import { useDatalinkFeatureStore } from '@/features/datalink/store/use-datalink-store';
 import { DEFAULT_MAVLINK_PORT } from '@shared/types/datalink';
 import './EthernetConnectPanel.css';
 
 export function EthernetConnectPanel() {
-  const form = useDatalinkStore((s) => s.ethernetForm);
-  const setForm = useDatalinkStore((s) => s.setEthernetForm);
-  const connect = useDatalinkStore((s) => s.connectEthernet);
-  const disconnect = useDatalinkStore((s) => s.disconnectEthernet);
-  const busy = useDatalinkStore((s) => s.busy);
-  const error = useDatalinkStore((s) => s.error);
-  const ethernet = useDatalinkStore((s) =>
-    s.snapshots.find((x) => x.id === 'ethernet'),
+  const form = useDatalinkFeatureStore((s) => s.ethernetForm);
+  const setForm = useDatalinkFeatureStore((s) => s.setEthernetForm);
+  const connect = useDatalinkFeatureStore((s) => s.connectEthernet);
+  const disconnect = useDatalinkFeatureStore((s) => s.disconnectEthernet);
+  const busy = useDatalinkFeatureStore((s) => s.busy);
+  const error = useDatalinkFeatureStore((s) => s.error);
+  const ethernet = useDatalinkFeatureStore((s) =>
+    s.links.find((x) => x.id === 'ethernet'),
   );
   const isConnected = ethernet?.state === 'connected';
 

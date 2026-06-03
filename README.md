@@ -25,7 +25,12 @@ npm run electron:dev
 
 ## Architecture
 
-See **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for IPC flow, directory layout, and Zustand integration (intended for sharing with Gemini / co-design prompts).
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — IPC flow, directory layout, Zustand integration  
+- **[docs/GEMINI_REVIEW.md](docs/GEMINI_REVIEW.md)** — paste-friendly repo snapshot for Gemini (no clone required)
+
+## Repository
+
+https://github.com/zhaot3065/mdt-gcs
 
 ## Project layout
 

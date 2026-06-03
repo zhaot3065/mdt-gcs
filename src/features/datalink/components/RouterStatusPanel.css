@@ -1,0 +1,76 @@
+.router-panel {
+  margin: 1rem;
+  padding: 1rem;
+  max-width: 720px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.router-panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.router-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.router-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.router-stat .label {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.router-stat .value {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.router-stat .value.accent {
+  color: var(--accent);
+}
+
+.router-stat .value.mono,
+.health-table .mono {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.health-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.health-table th,
+.health-table td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+
+.health-table th {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+
+.health-table tr[data-active='true'] {
+  background: rgba(61, 158, 255, 0.08);
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin: 0.75rem 0 0;
+}

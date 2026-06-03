@@ -40,22 +40,22 @@ function createWindow(): void {
 function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.ETHERNET_CONNECT, async (_e, opts: EthernetConnectOptions) => {
     await connectionManager.connectEthernet(opts);
-    return connectionManager.getSnapshot();
+    return connectionManager.getPayload();
   });
 
   ipcMain.handle(IPC_CHANNELS.ETHERNET_DISCONNECT, async () => {
     await connectionManager.disconnectEthernet();
-    return connectionManager.getSnapshot();
+    return connectionManager.getPayload();
   });
 
   ipcMain.handle(IPC_CHANNELS.H16_CONNECT, async (_e, opts: SerialConnectOptions) => {
     await connectionManager.connectH16(opts);
-    return connectionManager.getSnapshot();
+    return connectionManager.getPayload();
   });
 
   ipcMain.handle(IPC_CHANNELS.H16_DISCONNECT, async () => {
     await connectionManager.disconnectH16();
-    return connectionManager.getSnapshot();
+    return connectionManager.getPayload();
   });
 
   ipcMain.handle(IPC_CHANNELS.LIST_SERIAL_PORTS, () => connectionManager.listSerialPorts());
