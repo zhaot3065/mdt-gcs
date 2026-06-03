@@ -5,6 +5,7 @@ import { H16ConnectPanel } from '@/features/datalink/components/H16ConnectPanel'
 import { RouterStatusPanel } from '@/features/datalink/components/RouterStatusPanel';
 import { VehicleMonitorPanel } from '@/features/vehicle/components/VehicleMonitorPanel';
 import { MapDisplay } from '@/features/map/components/MapDisplay';
+import { MissionListPanel } from '@/features/mission/components/MissionListPanel';
 import { useDatalinkFeatureStore } from '@/features/datalink/store/use-datalink-store';
 import { useVehicleStore } from '@/features/vehicle/store/use-vehicle-store';
 
@@ -29,6 +30,7 @@ export default function App() {
           <MapDisplay />
         </div>
         <aside className="flex w-full shrink-0 flex-col overflow-y-auto lg:w-[380px]">
+          <MissionListPanel />
           <VehicleMonitorPanel />
           <EthernetConnectPanel />
           <H16ConnectPanel />

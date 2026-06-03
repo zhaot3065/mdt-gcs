@@ -21,3 +21,25 @@
 .vehicle-icon-root {
   pointer-events: none;
 }
+
+.mission-wp-leaflet-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.mission-wp-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(10, 12, 16, 0.92);
+  border: 2px solid #3d9eff;
+  color: #e8edf5;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}

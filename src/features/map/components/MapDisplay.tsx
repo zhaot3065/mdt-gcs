@@ -14,8 +14,25 @@ import { useVehicleStore } from '@/features/vehicle/store/use-vehicle-store';
 import { VehicleIcon } from './VehicleIcon';
 import { MapLayerToggle } from './MapLayerToggle';
 import { MapHudOverlay } from './MapHudOverlay';
+import { MissionMapLayers } from './MissionMapLayers';
+import { useMissionStore } from '@/features/mission/store/use-mission-store';
 import 'leaflet/dist/leaflet.css';
 import './MapDisplay.css';
+
+function MapEditModeCursor() {
+  const isEditMode = useMissionStore((s) => s.isEditMode);
+  const map = useMap();
+
+  useEffect(() => {
+    const el = map.getContainer();
+    el.style.cursor = isEditMode ? 'crosshair' : '';
+    return () => {
+      el.style.cursor = '';
+    };
+  }, [isEditMode, map]);
+
+  return null;
+}
 
 function MapFollowVehicle() {
   const connected = useVehicleStore((s) => s.vehicle.connected);
@@ -81,6 +98,7 @@ export function MapDisplay() {
   const connected = useVehicleStore((s) => s.vehicle.connected);
   const lat = useVehicleStore((s) => s.vehicle.position.lat);
   const lon = useVehicleStore((s) => s.vehicle.position.lon);
+  const isEditMode = useMissionStore((s) => s.isEditMode);
 
   const center: [number, number] =
     lat != null && lon != null ? [lat, lon] : DEFAULT_MAP_CENTER;
@@ -106,7 +124,9 @@ export function MapDisplay() {
           errorTileUrl=""
         />
         <MapFollowVehicle />
+        <MapEditModeCursor />
         <VehicleMarkerLayer />
+        <MissionMapLayers />
       </MapContainer>
 
       <MapLayerToggle />
@@ -115,6 +135,12 @@ export function MapDisplay() {
       {!connected && (
         <div className="pointer-events-none absolute bottom-3 left-3 z-[1000] rounded-md bg-slate-900/90 px-2 py-1 text-xs text-slate-400 ring-1 ring-slate-600">
           Waiting for vehicle telemetry…
+        </div>
+      )}
+
+      {isEditMode && (
+        <div className="pointer-events-none absolute bottom-3 right-3 z-[1000] rounded-md border border-amber-600/60 bg-amber-950/90 px-2 py-1 text-xs font-semibold text-amber-200 ring-1 ring-amber-500/40">
+          Mission edit — click map to add waypoint · drag markers to move
         </div>
       )}
     </section>

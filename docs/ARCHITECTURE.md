@@ -58,7 +58,8 @@ MDT_GCS/
 │   │   ├── store/use-map-store.ts
 │   │   └── components/MapDisplay.tsx, MapHudOverlay.tsx
 │   ├── features/mission/
-│   │   └── store/use-mission-store.ts
+│   │   ├── store/use-mission-store.ts
+│   │   └── components/MissionListPanel.tsx, MissionUploadConfirmModal.tsx
 │   ├── stores/
 │   │   └── datalink-store.ts    # Re-export shim → features/datalink
 │   ├── components/
@@ -78,7 +79,8 @@ electron/connection/timesync-rtt.ts
 electron/connection/mavlink-pack.ts
 electron/connection/mavlink-mission.ts
 electron/connection/mission-egress.ts
-src/features/mission/store/use-mission-store.ts
+src/features/mission/components/MissionListPanel.tsx
+src/features/map/components/MissionMapLayers.tsx
 ```
 
 ---
@@ -175,7 +177,9 @@ Defined in `shared/types/mission.ts`. Invoke `datalink:mission:upload` with `Gcs
 
 Main path: `mission-egress.ts` → `sendFrameOnActiveLink()` (same guard as commands) → `encodeMissionCount()` (MAVLink #44). Announces waypoint count only; **MISSION_ITEM_INT handshake is a later phase**.
 
-Renderer: `useMissionStore` — `waypoints`, `addWaypoint`, `updateWaypoint`, `removeWaypoint`, `uploadMission()`.
+Renderer: `useMissionStore` — `isEditMode`, `waypoints`, CRUD actions, `uploadMission()`.
+
+UI: `MissionListPanel` (sidebar), `MissionMapLayers` in `MapDisplay` (click/drag/polyline), `MissionUploadConfirmModal`.
 
 Preload: `window.gcs.mission.upload(payload)`.
 
@@ -263,7 +267,7 @@ interface DatalinkIpcPayload {
 
 ```bash
 npm install
-npm run electron:dev    # Vite + Electron with HMR
+npm run electron:dev    # vite only — vite-plugin-electron launches Electron once
 npm run typecheck
 npm run build
 ```

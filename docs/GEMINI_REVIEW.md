@@ -3,7 +3,7 @@
 > **Repo:** https://github.com/zhaot3065/mdt-gcs  
 > **Branch:** `main`  
 > **Purpose:** Paste this document (or sections) into Gemini when you cannot clone the repo.  
-> **Last updated:** 2026-06-04 — + Mission planner foundation (types, MISSION_COUNT stub, Zustand store)
+> **Last updated:** 2026-06-04 — + Map mission editor UI + electron:dev single-instance fix
 
 ---
 
@@ -24,7 +24,7 @@
 | Serial | `serialport` 13 (Main only) |
 | Protocol | Hand-rolled MAVLink v1/v2 frame parse in Main |
 
-**Run:** `npm install` → `npm run electron:dev`
+**Run:** `npm install` → `npm run electron:dev` (runs `vite` only — `vite-plugin-electron` starts one Electron instance)
 
 ---
 
@@ -57,7 +57,7 @@ MDT_GCS/
     ├── datalink/                 # useDatalinkFeatureStore, RouterStatusPanel
     ├── vehicle/                  # useVehicleStore, VehicleMonitorPanel
     ├── map/                      # useMapStore, MapDisplay, MapHudOverlay
-    └── mission/                  # useMissionStore (waypoints; map UI next)
+    └── mission/                  # useMissionStore, MissionListPanel, upload confirm
 ```
 
 ```
@@ -255,7 +255,13 @@ Renderer: useMissionStore.uploadMission()
   → active transport.send(buffer) ONLY
 ```
 
-**Not yet:** MISSION_REQUEST / MISSION_ITEM_INT loop, map click → waypoint markers, mission list panel.
+**Not yet:** MISSION_REQUEST / MISSION_ITEM_INT handshake loop in Main.
+
+**Map mission editor (done):**
+- `useMissionStore.isEditMode` — toggle from `MissionListPanel`
+- Map click (Edit ON) → `addWaypoint(lat, lon, alt=100m)`
+- `MissionMapLayers`: numbered markers, Polyline route, draggable markers → `updateWaypoint`
+- `MissionListPanel`: seq/cmd/alt table, Remove, Clear All, Upload + `MissionUploadConfirmModal`
 
 ---
 
@@ -270,7 +276,7 @@ Renderer: useMissionStore.uploadMission()
 
 `App.tsx` mounts datalink + vehicle IPC on load.
 
-**UI:** `MapDisplay`, `DatalinkStatusBar`, `VehicleMonitorPanel`, `EthernetConnectPanel`, **`H16ConnectPanel`** (port refresh 🔄, baud 57600 default), `RouterStatusPanel`, `MapLayerToggle`.
+**UI:** `MapDisplay` (+ `MissionMapLayers`, `MapHudOverlay`), `MissionListPanel`, `DatalinkStatusBar`, `VehicleMonitorPanel`, connect panels, `RouterStatusPanel`, `MapLayerToggle`.
 
 **Flight modes UI:** `src/features/vehicle/constants/flight-modes.ts` — Copter + VTOL Q/Plane modes; confirm modal on change.
 
@@ -291,6 +297,8 @@ Renderer: useMissionStore.uploadMission()
 | Electron build | `main.cjs` / `preload.cjs`; `serialport` external + CJS lib format |
 | Map HUD | `MapHudOverlay` + ATTITUDE parse |
 | Mission foundation | `mission.ts`, `useMissionStore`, MISSION_COUNT stub |
+| Map mission editor | Edit mode, markers, polyline, drag, list panel, upload confirm |
+| Dev fix | `electron:dev` = `vite` only (no duplicate Electron windows) |
 
 **Build note:** `package.json` has `"type":"module"` — Main/Preload must be **`.cjs`** + `lib.formats: ['cjs']` in `vite.config.ts` so `serialport` native bindings and `__dirname` work.
 
@@ -308,20 +316,21 @@ Renderer: useMissionStore.uploadMission()
 | Vehicle IPC + monitor UI | — |
 | Hybrid map + HUD overlay | — |
 | TIMESYNC RTT + toolbar RTT display | — |
-| Mission types + Zustand store + MISSION_COUNT stub | Map waypoint editor UI |
-| Active-link guard reused for mission egress | Mission confirm modal + list panel |
+| Mission types + Zustand + MISSION_COUNT stub | MISSION_ITEM_INT handshake (Main) |
+| Map waypoint editor + upload confirm UI | Geo-fence / rally missions |
+| Active-link guard reused for mission egress | Full MAVLink dialect |
 
 ---
 
 ## 9. Suggested next prompts for Gemini
 
-**A. Map mission editor (priority)**
+**A. MISSION_ITEM handshake (Main — priority)**
 
-> Wire Leaflet map click → `useMissionStore.addWaypoint`; show numbered markers + side panel to edit alt/remove/reorder; upload button calls `mission.upload`.
+> After MISSION_COUNT, implement `MISSION_REQUEST` / `MISSION_ITEM_INT` state machine in `mission-egress.ts`; listen on router frames for autopilot requests.
 
-**B. MISSION_ITEM handshake (Main)**
+**B. Mission UX polish**
 
-> After MISSION_COUNT, handle `MISSION_REQUEST` / send `MISSION_ITEM_INT` per seq on active link; extend `mission-egress.ts` with state machine.
+> Reorder waypoints, command type dropdown (TAKEOFF/LAND), home WP, persist mission JSON.
 
 **C. Extend telemetry**
 
@@ -371,10 +380,10 @@ Main pipelines:
 - transport → timesync-rtt → router dedup → mavlink-parser → vehicle:state
 - send-command / mission:upload → sendFrameOnActiveLink guard → active transport.send
 
-Renderer stores: datalink, vehicle, map (+ MapHudOverlay), mission (useMissionStore — waypoints[], no map UI yet)
+Renderer stores: datalink, vehicle, map (+ HUD), mission (edit mode, waypoints, upload confirm)
 
-Done: TIMESYNC RTT, Electron CJS/serialport fix, map HUD, mission contract + MISSION_COUNT stub.
-Next: map waypoint editor UI, then MISSION_ITEM_INT handshake.
+Done: TIMESYNC RTT, CJS build, map HUD, mission editor UI, MISSION_COUNT stub.
+Next: MISSION_ITEM_INT handshake in Main.
 
 Paste full spec: docs/GEMINI_REVIEW.md + docs/ARCHITECTURE.md
 ```

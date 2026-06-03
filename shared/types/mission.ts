@@ -46,11 +46,14 @@ export interface GcsMissionPayload {
   missionType?: number;
 }
 
+/** Default altitude (m) when adding waypoints from the map editor */
+export const DEFAULT_MISSION_WP_ALT_M = 100;
+
 export function createWaypointItem(
   seq: number,
   lat: number,
   lon: number,
-  alt = 0,
+  alt = DEFAULT_MISSION_WP_ALT_M,
   command: number = MAV_CMD.NAV_WAYPOINT,
 ): WaypointItem {
   return {

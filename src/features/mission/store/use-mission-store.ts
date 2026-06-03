@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { GcsCommandResult } from '@shared/types/datalink';
 import {
   createWaypointItem,
+  DEFAULT_MISSION_WP_ALT_M,
   reindexWaypointItems,
   type GcsMissionPayload,
   type WaypointItem,
@@ -9,8 +10,11 @@ import {
 
 interface MissionStore {
   waypoints: WaypointItem[];
+  isEditMode: boolean;
   uploadBusy: boolean;
   lastUploadResult: GcsCommandResult | null;
+  setEditMode: (enabled: boolean) => void;
+  toggleEditMode: () => void;
   addWaypoint: (lat: number, lon: number, alt?: number) => void;
   updateWaypoint: (seq: number, patch: Partial<Omit<WaypointItem, 'seq'>>) => void;
   removeWaypoint: (seq: number) => void;
@@ -23,10 +27,14 @@ interface MissionStore {
 
 export const useMissionStore = create<MissionStore>((set, get) => ({
   waypoints: [],
+  isEditMode: false,
   uploadBusy: false,
   lastUploadResult: null,
 
-  addWaypoint: (lat, lon, alt = 0) => {
+  setEditMode: (enabled) => set({ isEditMode: enabled }),
+  toggleEditMode: () => set((s) => ({ isEditMode: !s.isEditMode })),
+
+  addWaypoint: (lat, lon, alt = DEFAULT_MISSION_WP_ALT_M) => {
     set((state) => {
       const seq = state.waypoints.length;
       return {
