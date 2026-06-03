@@ -1,6 +1,6 @@
 import { useDatalinkFeatureStore } from '@/features/datalink/store/use-datalink-store';
-import { formatRttMs, perLinkRttSlot } from '@/features/datalink/utils/rtt-format';
-import type { DatalinkSnapshot, RttEstimate } from '@shared/types/datalink';
+import { useVehicleStore } from '@/features/vehicle/store/use-vehicle-store';
+import { formatRttMs, perLinkRttSlot } from '@/features/datalink/utils/rtt-format';import type { DatalinkSnapshot, RttEstimate } from '@shared/types/datalink';
 import { SignalLamp } from './SignalLamp';
 import './DatalinkStatusBar.css';
 
@@ -28,7 +28,9 @@ export function DatalinkStatusBar() {
   const links = useDatalinkFeatureStore((s) => s.links);
   const router = useDatalinkFeatureStore((s) => s.router);
   const activeLinkId = router.activeLinkId;
-
+  const vehicleConnected = useVehicleStore((s) => s.vehicle.connected);
+  const gpsSats = useVehicleStore((s) => s.vehicle.gps.satellitesVisible);
+  const batteryPercent = useVehicleStore((s) => s.vehicle.battery.percent);
 
 
   return (
@@ -104,8 +106,30 @@ export function DatalinkStatusBar() {
 
       )}
 
-    </header>
+      {vehicleConnected && (
+        <div className="vehicle-telemetry-badges" aria-label="Vehicle telemetry summary">
+          <span className="vehicle-badge vehicle-badge-gps" title="GPS satellites visible">
+            🛰 {gpsSats > 0 ? gpsSats : '—'}
+          </span>
+          <span
+            className="vehicle-badge vehicle-badge-batt"
+            title="Battery remaining"
+            data-level={
+              batteryPercent == null
+                ? 'unknown'
+                : batteryPercent <= 20
+                  ? 'low'
+                  : batteryPercent <= 50
+                    ? 'mid'
+                    : 'ok'
+            }
+          >
+            🔋 {batteryPercent != null ? `${batteryPercent}%` : '—'}
+          </span>
+        </div>
+      )}
 
+    </header>
   );
 
 }

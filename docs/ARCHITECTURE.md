@@ -53,6 +53,7 @@ MDT_GCS/
 │   │   └── components/RouterStatusPanel.tsx
 │   ├── features/vehicle/
 │   │   ├── store/use-vehicle-store.ts
+│   │   ├── utils/gps-label.ts   # fixType label, HDOP color
 │   │   └── components/VehicleMonitorPanel.tsx
 │   ├── features/map/
 │   │   ├── store/use-map-store.ts
@@ -147,6 +148,20 @@ Defined in `shared/types/datalink.ts`:
 **Rule:** Never pass raw `Buffer` or sockets to the renderer. Only serializable snapshots and connect options.
 
 **Preload:** `window.gcs.vehicle.onState(handler)` mirrors datalink payload subscription.
+
+**`VehicleState` telemetry (Main `mavlink-parser.ts` → 150 ms throttle):**
+
+| msgId | Message | Target |
+|-------|---------|--------|
+| 0 | HEARTBEAT | heartbeat.* |
+| 1 | SYS_STATUS | battery voltage/current/percent (fallback) |
+| 24 | GPS_RAW_INT | gps.fixType, satellitesVisible, hdop (eph÷100) |
+| 30 | ATTITUDE | attitude |
+| 33 | GLOBAL_POSITION_INT | position |
+| 74 | VFR_HUD | vfrHud |
+| 147 | BATTERY_STATUS | battery.percent (priority) |
+
+Renderer: `VehicleMonitorPanel` GPS section; toolbar `DatalinkStatusBar` 🛰/🔋 badges; `src/features/vehicle/utils/gps-label.ts`.
 
 ### Hybrid map (no extra IPC)
 

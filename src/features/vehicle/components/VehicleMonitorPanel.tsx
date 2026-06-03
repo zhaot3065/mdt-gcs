@@ -1,7 +1,7 @@
 import { useVehicleStore } from '../store/use-vehicle-store';
 import { VehicleCommandControls } from './VehicleCommandControls';
 import { FlightModeSelector } from './FlightModeSelector';
-
+import { formatHdop, gpsFixTypeLabel, hdopQualityClass } from '../utils/gps-label';
 function fmtCoord(value: number | null, decimals = 6): string {
   if (value == null || !Number.isFinite(value)) return '—';
   return value.toFixed(decimals);
@@ -50,7 +50,7 @@ function GaugeBar({
 
 export function VehicleMonitorPanel() {
   const v = useVehicleStore((s) => s.vehicle);
-  const { heartbeat, position, battery, vfrHud } = v;
+  const { heartbeat, position, battery, gps, vfrHud } = v;
 
   const armedClass = heartbeat.isArmed
     ? 'bg-red-500/20 text-red-400 ring-red-500/50'
@@ -112,8 +112,38 @@ export function VehicleMonitorPanel() {
         </p>
       </div>
 
-      <div className="mb-4 space-y-3">
-        <GaugeBar
+      <div className="mb-4 rounded-md border border-slate-700 bg-slate-800/60 p-3">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-sky-400/90">
+          GPS Reception
+        </p>
+        <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+          <div>
+            <p className="text-xs text-slate-500">Satellites</p>
+            <p className="font-mono text-slate-100">
+              <span aria-hidden>🛰️ </span>
+              {gps.satellitesVisible > 0 ? `${gps.satellitesVisible} sats` : '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">HDOP</p>
+            <p className={`font-mono font-semibold ${hdopQualityClass(gps.hdop)}`}>
+              {gps.hdop != null ? `HDOP: ${formatHdop(gps.hdop)}` : 'HDOP: —'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500">Fix</p>
+            <p
+              className={`font-mono font-semibold ${
+                gps.fixType >= 3 ? 'text-emerald-400' : 'text-orange-400'
+              }`}
+            >
+              {gpsFixTypeLabel(gps.fixType)}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-4 space-y-3">        <GaugeBar
           label="Battery voltage"
           value={battery.voltageV}
           max={25.2}

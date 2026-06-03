@@ -29,8 +29,18 @@ export interface VehiclePosition {
 export interface VehicleBattery {
   voltageV: number | null;
   currentA: number | null;
-  /** 0–100; null if unknown (MAVLink sends -1) */
+  /** 0–100; null if unknown (MAVLink sends -1). BATTERY_STATUS #147 preferred over SYS_STATUS #1. */
   percent: number | null;
+  lastUpdatedAt: number;
+}
+
+/** MAVLink GPS_RAW_INT (#24) — satellite reception quality */
+export interface VehicleGps {
+  /** GPS_FIX_TYPE enum (0=no fix, 3=3D, 6=RTK fixed, …) */
+  fixType: number;
+  satellitesVisible: number;
+  /** Horizontal dilution of precision; null if eph unknown (65535) */
+  hdop: number | null;
   lastUpdatedAt: number;
 }
 
@@ -59,6 +69,7 @@ export interface VehicleState {
   heartbeat: VehicleHeartbeat;
   position: VehiclePosition;
   battery: VehicleBattery;
+  gps: VehicleGps;
   vfrHud: VehicleVfrHud;
   attitude: VehicleAttitude;
 }
@@ -75,9 +86,11 @@ export const VEHICLE_BROADCAST_MS = 150;
 export const MAVLINK_MSG_ID = {
   HEARTBEAT: 0,
   SYS_STATUS: 1,
+  GPS_RAW_INT: 24,
   ATTITUDE: 30,
   GLOBAL_POSITION_INT: 33,
   VFR_HUD: 74,
+  BATTERY_STATUS: 147,
 } as const;
 
 export function createInitialVehicleState(now = 0): VehicleState {
@@ -106,6 +119,12 @@ export function createInitialVehicleState(now = 0): VehicleState {
       voltageV: null,
       currentA: null,
       percent: null,
+      lastUpdatedAt: 0,
+    },
+    gps: {
+      fixType: 0,
+      satellitesVisible: 0,
+      hdop: null,
       lastUpdatedAt: 0,
     },
     vfrHud: {

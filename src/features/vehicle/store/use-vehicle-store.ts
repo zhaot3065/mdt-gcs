@@ -17,7 +17,13 @@ export const useVehicleStore = create<VehicleStore>((set, get) => ({
   commandBusy: false,
   lastCommandResult: null,
 
-  applyState: (vehicle) => set({ vehicle }),
+  applyState: (state) =>
+    set({
+      vehicle: {
+        ...state,
+        gps: state.gps ?? createInitialVehicleState().gps,
+      },
+    }),
 
   subscribeIpc: () => {
     if (!window.gcs?.vehicle) return () => undefined;

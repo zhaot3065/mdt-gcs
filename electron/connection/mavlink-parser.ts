@@ -13,6 +13,7 @@ import type { MavlinkRouter, ForwardedMavlinkFrame } from './mavlink-router';
 const MAV_MODE_FLAG_SAFETY_ARMED = 128;
 const MAV_AUTOPILOT_ARDUPILOTMEGA = 3;
 const HEADING_UNKNOWN = 65535;
+const GPS_EPH_UNKNOWN = 65535;
 
 const ARDUCOPTER_MODE_NAMES: Record<number, string> = {
   0: 'STABILIZE',
@@ -140,6 +141,12 @@ export class MavlinkTelemetryParser extends EventEmitter {
       case MAVLINK_MSG_ID.SYS_STATUS:
         this.parseSysStatus(payload);
         break;
+      case MAVLINK_MSG_ID.GPS_RAW_INT:
+        this.parseGpsRawInt(payload);
+        break;
+      case MAVLINK_MSG_ID.BATTERY_STATUS:
+        this.parseBatteryStatus(payload);
+        break;
       case MAVLINK_MSG_ID.VFR_HUD:
         this.parseVfrHud(payload);
         break;
@@ -197,9 +204,39 @@ export class MavlinkTelemetryParser extends EventEmitter {
     const remaining = payload.readInt8(18);
 
     this.state.battery = {
-      voltageV: voltageMv === 65535 ? null : voltageMv / 1000,
-      currentA: currentCa === -1 ? null : currentCa / 100,
-      percent: remaining < 0 ? null : remaining,
+      ...this.state.battery,
+      voltageV: voltageMv === 65535 ? this.state.battery.voltageV : voltageMv / 1000,
+      currentA: currentCa === -1 ? this.state.battery.currentA : currentCa / 100,
+      percent: remaining >= 0 ? remaining : this.state.battery.percent,
+      lastUpdatedAt: now,
+    };
+  }
+
+  private parseGpsRawInt(payload: Buffer): void {
+    if (payload.length < 30) return;
+    const now = Date.now();
+    const fixType = payload[8];
+    const eph = payload.readUInt16LE(21);
+    const satellitesVisible = payload[29];
+
+    this.state.gps = {
+      fixType,
+      satellitesVisible,
+      hdop: eph === GPS_EPH_UNKNOWN ? null : eph / 100,
+      lastUpdatedAt: now,
+    };
+  }
+
+  private parseBatteryStatus(payload: Buffer): void {
+    if (payload.length < 36) return;
+    const now = Date.now();
+    const remaining = payload.readInt8(35);
+    const percent =
+      remaining >= 0 && remaining <= 100 ? remaining : null;
+
+    this.state.battery = {
+      ...this.state.battery,
+      percent: percent ?? this.state.battery.percent,
       lastUpdatedAt: now,
     };
   }

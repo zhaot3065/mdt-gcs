@@ -171,7 +171,13 @@ interface VehicleState {
   battery: {
     voltageV: number | null;
     currentA: number | null;
-    percent: number | null;     // null if MAVLink -1
+    percent: number | null;     // BATTERY_STATUS #147 preferred; SYS_STATUS #1 fallback
+    lastUpdatedAt: number;
+  };
+  gps: {
+    fixType: number;            // GPS_FIX_TYPE (GPS_RAW_INT #24)
+    satellitesVisible: number;
+    hdop: number | null;        // eph / 100; null if eph=65535
     lastUpdatedAt: number;
   };
   vfrHud: { airspeedMs, groundspeedMs, climbMs, lastUpdatedAt };
@@ -219,9 +225,11 @@ Transport data → MavlinkStreamStats (per link)
 MavlinkRouter 'frame' → MavlinkTelemetryParser
   msg 0  HEARTBEAT           → heartbeat.*
   msg 33 GLOBAL_POSITION_INT → position.*
-  msg 1  SYS_STATUS          → battery.*
-  msg 30 ATTITUDE             → attitude.roll/pitch/yaw (deg)
+  msg 1  SYS_STATUS          → battery.voltage/current/percent (fallback)
+  msg 24 GPS_RAW_INT         → gps.fixType, satellitesVisible, hdop (eph/100)
+  msg 30 ATTITUDE            → attitude.roll/pitch/yaw (deg)
   msg 74 VFR_HUD             → vfrHud.* (+ heading fallback)
+  msg 147 BATTERY_STATUS     → battery.percent (priority over SYS_STATUS)
   → dirty flag → 150ms throttle → vehicle:state
 ```
 
@@ -304,6 +312,7 @@ Renderer: useMissionStore.uploadMission()  [Promise — awaits ACK]
 | Dev fix | `electron:dev` = `vite` only |
 | Map UI | HUD + map source stacked top-right |
 | Mission UX | Reorder ▲/▼, command dropdown, HOME row, JSON save/load (renderer-only) |
+| Telemetry ext | GPS_RAW_INT #24 + BATTERY_STATUS #147; toolbar GPS/batt badges |
 
 **Build note:** `package.json` has `"type":"module"` — Main/Preload must be **`.cjs`** + `lib.formats: ['cjs']` in `vite.config.ts` so `serialport` native bindings and `__dirname` work.
 
@@ -315,10 +324,12 @@ Renderer: useMissionStore.uploadMission()  [Promise — awaits ACK]
 |------|---------|
 | Dual link + router + dedup + TIMESYNC RTT | Geo-fence / rally missions |
 | Command egress + mission upload handshake | Full MAVLink dialect |
-| Map mission editor + MISSION_ITEM_INT Main | GPS_RAW_INT, BATTERY_STATUS |
+| Map mission editor + MISSION_ITEM_INT Main | Full MAVLink dialect |
 | Map HUD (SPD/ALT/HDG/VS + attitude horizon) | Geo-fence / rally mission types |
 | Mission UX: reorder, MAV_CMD select, HOME row | Mission download from autopilot |
 | Mission JSON export/import (`MissionFileDocument`) | SITL integration tests in CI |
+| GPS_RAW_INT + BATTERY_STATUS → `VehicleGps` + battery priority | |
+| Toolbar badges: 🛰 sats + 🔋 %; GPS section in VehicleMonitorPanel | |
 | H16 + Ethernet connect UI | |
 | Vehicle telemetry + commands | |
 
@@ -326,13 +337,13 @@ Renderer: useMissionStore.uploadMission()  [Promise — awaits ACK]
 
 ## 9. Suggested next prompts for Gemini
 
-**A. Extend telemetry (priority)**
-
-> Add GPS_RAW_INT, BATTERY_STATUS to `mavlink-parser.ts`; extend `shared/types/vehicle.ts` first; surface in `VehicleMonitorPanel`.
-
-**B. Mission download / advanced types**
+**A. Mission download / advanced types (priority)**
 
 > MISSION_REQUEST_LIST from autopilot; geo-fence / rally via `MAV_MISSION_TYPE`.
+
+**B. SITL CI**
+
+> Headless Electron or parser unit tests against recorded MAVLink captures.
 
 ---
 
@@ -367,17 +378,17 @@ Stack: Electron+React+Zustand+Tailwind+Leaflet. ArduPilot GCS, dual link (ethern
 
 IPC in:
 - datalink:snapshot → DatalinkIpcPayload, 200ms (router.rtt: TIMESYNC preferred)
-- vehicle:state → VehicleState, 150ms (incl. attitude for HUD)
+- vehicle:state → VehicleState, 150ms (attitude HUD + gps + battery)
 
 IPC out:
 - datalink:send-command → arm|disarm|rtl|set_mode
 - datalink:mission:upload → GcsMissionPayload → Promise<GcsCommandResult>
   (MISSION_COUNT → MISSION_ITEM_INT* → MISSION_ACK handshake)
 
-Renderer: mission editor on map + MissionListPanel (reorder, MAV_CMD select, JSON save/load); HUD SPD/ALT/HDG/VS
+Renderer: mission editor + MissionListPanel; HUD; GPS/battery badges in toolbar; VehicleMonitorPanel GPS section
 
-Done: TIMESYNC RTT, mission upload handshake, map editor, overlay layout fix, mission UX polish.
-Next: GPS_RAW_INT / BATTERY_STATUS telemetry, mission download, geo-fence.
+Done: TIMESYNC RTT, mission handshake, map editor, mission UX, GPS_RAW_INT + BATTERY_STATUS telemetry.
+Next: mission download, geo-fence/rally, SITL CI.
 
 Paste: docs/GEMINI_REVIEW.md + docs/ARCHITECTURE.md
 ```
