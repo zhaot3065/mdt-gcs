@@ -1,0 +1,76 @@
+import { app, BrowserWindow, ipcMain } from 'electron';
+import path from 'node:path';
+import { ConnectionManager } from './connection/connection-manager';
+import {
+  IPC_CHANNELS,
+  type EthernetConnectOptions,
+  type SerialConnectOptions,
+} from '../shared/types/datalink';
+
+const isDev = !app.isPackaged;
+let mainWindow: BrowserWindow | null = null;
+const connectionManager = new ConnectionManager();
+
+function createWindow(): void {
+  mainWindow = new BrowserWindow({
+    width: 1280,
+    height: 800,
+    backgroundColor: '#0a0c10',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  if (isDev) {
+    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  }
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+
+  connectionManager.startMetricsBroadcast(() => mainWindow);
+}
+
+function registerIpc(): void {
+  ipcMain.handle(IPC_CHANNELS.ETHERNET_CONNECT, async (_e, opts: EthernetConnectOptions) => {
+    await connectionManager.connectEthernet(opts);
+    return connectionManager.getSnapshot();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ETHERNET_DISCONNECT, async () => {
+    await connectionManager.disconnectEthernet();
+    return connectionManager.getSnapshot();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.H16_CONNECT, async (_e, opts: SerialConnectOptions) => {
+    await connectionManager.connectH16(opts);
+    return connectionManager.getSnapshot();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.H16_DISCONNECT, async () => {
+    await connectionManager.disconnectH16();
+    return connectionManager.getSnapshot();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.LIST_SERIAL_PORTS, () => connectionManager.listSerialPorts());
+}
+
+app.whenReady().then(() => {
+  registerIpc();
+  createWindow();
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+});
+
+app.on('window-all-closed', () => {
+  connectionManager.stopMetricsBroadcast();
+  if (process.platform !== 'darwin') app.quit();
+});

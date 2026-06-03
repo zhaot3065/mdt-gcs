@@ -1,0 +1,12 @@
+.signal-lamp {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--lamp-color);
+  box-shadow:
+    0 0 6px var(--lamp-color),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+}

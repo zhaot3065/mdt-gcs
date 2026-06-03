@@ -1,0 +1,71 @@
+:root {
+  --bg-app: #0a0c10;
+  --bg-panel: #12161f;
+  --bg-elevated: #1a2030;
+  --border: #2e3a52;
+  --text-primary: #f2f6ff;
+  --text-secondary: #9fb0cc;
+  --accent: #3d9eff;
+  --accent-dim: #2a6db3;
+  --signal-good: #3dff7a;
+  --signal-degraded: #ffd23d;
+  --signal-poor: #ff4d4d;
+  --signal-offline: #5a6478;
+  --font-ui: 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Cascadia Mono', 'Consolas', monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  border-radius: 4px;
+  padding: 0.35rem 0.75rem;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input,
+select {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+}
+
+input:focus,
+select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
