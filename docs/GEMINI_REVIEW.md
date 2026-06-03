@@ -3,13 +3,13 @@
 > **Repo:** https://github.com/zhaot3065/mdt-gcs  
 > **Branch:** `main`  
 > **Purpose:** Paste this document (or sections) into Gemini when you cannot clone the repo.  
-> **Last updated:** 2026-06-03 — + Flight mode change (set_mode / DO_SET_MODE)
+> **Last updated:** 2026-06-03 — + H16 serial connect UI
 
 ---
 
 ## 1. Project summary (one paragraph)
 
-**MDT GCS** is an Electron + React GCS for ArduPilot with dual datalinks, **MavlinkRouter**, **VehicleState** telemetry (150 ms), **command egress** (ARM/DISARM/RTL/**set_mode** on active link via `datalink:send-command`), and a **hybrid map** (OSM / `gcs-tiles://`). Flight mode dropdown (Copter + VTOL modes) uses the same confirm-modal safety pattern before `MAV_CMD_DO_SET_MODE`.
+**MDT GCS** is an Electron + React GCS for ArduPilot with **dual datalinks** (SprintLink Ethernet + **H16 USB serial**), **MavlinkRouter**, **VehicleState** telemetry, **command egress**, hybrid map, and field panels for Ethernet/H16 connect, flight mode, and vehicle commands.
 
 ---
 
@@ -58,7 +58,7 @@ MDT_GCS/
 electron/protocol/gcs-tiles-protocol.ts  # protocol.handle → userData/maps
 ```
 
-**Preload:** `window.gcs.datalink.*` + `window.gcs.vehicle.onState` + `vehicle.sendCommand`
+**Preload:** `window.gcs.datalink.*` (incl. `getSerialPorts`, `connectH16`, `disconnectH16`) + `vehicle.onState` + `vehicle.sendCommand`
 
 ---
 
@@ -71,7 +71,13 @@ Payload: **`DatalinkIpcPayload`** = `{ links[2], router, updatedAt }`
 - Each link: `metrics`, `health` (`isLive`, `isActiveRoute`, …)
 - Router: `activeLinkId`, `selectionReason`, dedup metrics, `rtt` (heartbeat_proxy; TIMESYNC hook ready)
 
-Invoke: `ethernet:connect|disconnect`, `h16:connect|disconnect`, `serial:list` → returns `DatalinkIpcPayload`.
+Invoke:
+- `ethernet:connect|disconnect` → `DatalinkIpcPayload`
+- `h16:connect` → `SerialConnectOptions` `{ path, baudRate }` → `DatalinkIpcPayload`
+- `h16:disconnect` → `DatalinkIpcPayload`
+- `serial:list` → `SerialPortInfo[]` (not full payload)
+
+Preload aliases: `getSerialPorts()` = `serial:list`, `connectH16`, `disconnectH16`.
 
 **Egress invoke:** `datalink:send-command` → `GcsCommandRequest` → `GcsCommandResult`
 
@@ -211,7 +217,7 @@ Renderer: window.gcs.vehicle.sendCommand({ command: 'arm'|'disarm'|'rtl' })
 
 `App.tsx` mounts datalink + vehicle IPC on load.
 
-**UI:** `MapDisplay` (main), `DatalinkStatusBar`, `VehicleMonitorPanel` (`FlightModeSelector` + ARM/DISARM/RTL), `EthernetConnectPanel`, `RouterStatusPanel`, `MapLayerToggle`.
+**UI:** `MapDisplay`, `DatalinkStatusBar`, `VehicleMonitorPanel`, `EthernetConnectPanel`, **`H16ConnectPanel`** (port refresh 🔄, baud 57600 default), `RouterStatusPanel`, `MapLayerToggle`.
 
 **Flight modes UI:** `src/features/vehicle/constants/flight-modes.ts` — Copter + VTOL Q/Plane modes; confirm modal on change.
 
@@ -227,6 +233,7 @@ Renderer: window.gcs.vehicle.sendCommand({ command: 'arm'|'disarm'|'rtl' })
 | Map | gcs-tiles protocol, Leaflet, features/map |
 | Egress | send-command IPC, COMMAND_LONG arm/disarm/rtl/set_mode |
 | Flight mode UI | FlightModeSelector + DO_SET_MODE |
+| H16 UI | H16ConnectPanel + SerialPort.list |
 
 ---
 
@@ -238,22 +245,21 @@ Renderer: window.gcs.vehicle.sendCommand({ command: 'arm'|'disarm'|'rtl' })
 | Command egress (arm/disarm/rtl/set_mode) | Full MAVLink dialect |
 | Flight mode dropdown + confirm | — |
 | Telemetry parser (4 msg types) | Full MAVLink dialect / mission protocol |
-| Vehicle IPC + monitor UI | H16 connect UI panel |
-| ArduPilot flight mode strings | TIMESYNC RTT |
-| Tailwind vehicle gauges | Mission planner |
-| Hybrid map (OSM + gcs-tiles) | H16 connect UI |
-| Leaflet + vehicle marker | Mission planner |
+| H16 serial connect UI | Mission planner |
+| Vehicle IPC + monitor UI | TIMESYNC RTT |
+| Hybrid map (OSM + gcs-tiles) | HUD overlay |
+| Leaflet + vehicle marker | — |
 | TIMESYNC hook on router (`rttProvider`) | Wired |
 
 ---
 
 ## 9. Suggested next prompts for Gemini
 
-**A. H16 connect UI (priority)**
+**A. TIMESYNC RTT (priority)**
 
-> `H16ConnectPanel` with `datalink:serial:list` + `h16:connect`, match Ethernet panel styling.
+> Parse TIMESYNC in Main, inject `MavlinkRouter({ rttProvider })`, surface in router snapshot.
 
-**B. TIMESYNC RTT**
+**B. HUD overlay on map**
 
 > Parse TIMESYNC in Main, inject `MavlinkRouter({ rttProvider })`, surface in router snapshot.
 
@@ -275,6 +281,7 @@ Renderer: window.gcs.vehicle.sendCommand({ command: 'arm'|'disarm'|'rtl' })
 
 ```text
 DEFAULT_MAVLINK_PORT = 14550
+DEFAULT_H16_BAUD_RATE = 57600
 LINK_STALE_MS = 3000
 VEHICLE_STALE_MS = 5000
 METRICS_INTERVAL_MS = 200
@@ -313,9 +320,9 @@ Map: Online OSM / Offline gcs-tiles:// → userData/maps/{z}/{x}/{y}.png
 Main: transport → router (dedup) → telemetry parser → vehicle:state
      + send-command → active transport.send only
 
-Renderer: datalink/vehicle/map stores, MapDisplay, FlightModeSelector, VehicleCommandControls (confirm modal)
+Renderer: H16ConnectPanel (getSerialPorts on mount), EthernetConnectPanel, FlightModeSelector, VehicleCommandControls
 
-Next: H16 UI, TIMESYNC, HUD overlay, mission planner.
+Next: TIMESYNC, HUD overlay, mission planner.
 Paste full spec: docs/GEMINI_REVIEW.md
 ```
 

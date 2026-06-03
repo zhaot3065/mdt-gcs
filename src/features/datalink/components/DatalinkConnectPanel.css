@@ -1,0 +1,99 @@
+/* Shared by Ethernet + H16 connection panels */
+.datalink-connect-panel {
+  margin: 1rem;
+  padding: 1rem;
+  max-width: 720px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.datalink-connect-panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.datalink-connect-panel .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+.datalink-connect-panel .row label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  min-width: 140px;
+}
+
+.datalink-connect-panel .row label.grow {
+  flex: 1;
+  min-width: 200px;
+}
+
+.datalink-connect-panel .port-label-row {
+  display: flex;
+  gap: 0.35rem;
+  align-items: stretch;
+}
+
+.datalink-connect-panel .port-label-row select {
+  flex: 1;
+}
+
+.datalink-connect-panel .icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.25rem;
+  padding: 0.35rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.datalink-connect-panel .actions {
+  margin-top: 0.75rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.datalink-connect-panel .actions .ghost {
+  background: transparent;
+}
+
+.datalink-connect-panel .error {
+  color: var(--signal-poor);
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0;
+}
+
+.datalink-connect-panel .hint {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin: 0.5rem 0 0;
+}
+
+.datalink-connect-panel .status-pill {
+  display: inline-block;
+  margin-bottom: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+}
+
+.datalink-connect-panel .status-pill.connected {
+  background: rgba(61, 255, 122, 0.15);
+  color: var(--signal-good);
+  border: 1px solid rgba(61, 255, 122, 0.35);
+}
+
+.datalink-connect-panel .status-pill.disconnected {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}

@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { SerialPort } from 'serialport';
-
+import type { SerialPortInfo } from '../../shared/types/datalink';
 export interface SerialOptions {
   path: string;
   baudRate: number;
@@ -57,8 +57,17 @@ export class SerialTransport extends EventEmitter {
     return this.port?.isOpen ?? false;
   }
 
-  static async listPorts(): Promise<{ path: string; manufacturer?: string }[]> {
+  static async listPorts(): Promise<SerialPortInfo[]> {
     const ports = await SerialPort.list();
-    return ports.map((p) => ({ path: p.path, manufacturer: p.manufacturer }));
+    return ports
+      .filter((p) => p.path)
+      .map((p) => ({
+        path: p.path,
+        manufacturer: p.manufacturer ?? undefined,
+        serialNumber: p.serialNumber ?? undefined,
+        vendorId: p.vendorId ?? undefined,
+        productId: p.productId ?? undefined,
+      }))
+      .sort((a, b) => a.path.localeCompare(b.path));
   }
 }

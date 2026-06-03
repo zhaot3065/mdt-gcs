@@ -6,6 +6,7 @@ import {
   type GcsCommandRequest,
   type GcsCommandResult,
   type SerialConnectOptions,
+  type SerialPortInfo,
 } from '../shared/types/datalink';
 import { VEHICLE_IPC_CHANNELS, type VehicleState } from '../shared/types/vehicle';
 
@@ -16,7 +17,10 @@ export interface GcsBridgeApi {
     disconnectEthernet: () => Promise<DatalinkIpcPayload>;
     connectH16: (opts: SerialConnectOptions) => Promise<DatalinkIpcPayload>;
     disconnectH16: () => Promise<DatalinkIpcPayload>;
-    listSerialPorts: () => Promise<{ path: string; manufacturer?: string }[]>;
+    /** List available serial ports (H16 USB) */
+    getSerialPorts: () => Promise<SerialPortInfo[]>;
+    /** @deprecated use getSerialPorts */
+    listSerialPorts: () => Promise<SerialPortInfo[]>;
   };
   vehicle: {
     onState: (handler: (state: VehicleState) => void) => () => void;
@@ -35,6 +39,7 @@ const api: GcsBridgeApi = {
     disconnectEthernet: () => ipcRenderer.invoke(IPC_CHANNELS.ETHERNET_DISCONNECT),
     connectH16: (opts) => ipcRenderer.invoke(IPC_CHANNELS.H16_CONNECT, opts),
     disconnectH16: () => ipcRenderer.invoke(IPC_CHANNELS.H16_DISCONNECT),
+    getSerialPorts: () => ipcRenderer.invoke(IPC_CHANNELS.LIST_SERIAL_PORTS),
     listSerialPorts: () => ipcRenderer.invoke(IPC_CHANNELS.LIST_SERIAL_PORTS),
   },
   vehicle: {

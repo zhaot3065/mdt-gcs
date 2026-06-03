@@ -296,10 +296,8 @@ export class ConnectionManager {
 
 
 
-  async listSerialPorts(): Promise<{ path: string; manufacturer?: string }[]> {
-
+  async listSerialPorts() {
     return SerialTransport.listPorts();
-
   }
 
   /**

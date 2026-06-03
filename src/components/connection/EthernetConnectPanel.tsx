@@ -1,6 +1,6 @@
 import { useDatalinkFeatureStore } from '@/features/datalink/store/use-datalink-store';
 import { DEFAULT_MAVLINK_PORT } from '@shared/types/datalink';
-import './EthernetConnectPanel.css';
+import '@/features/datalink/components/DatalinkConnectPanel.css';
 
 export function EthernetConnectPanel() {
   const form = useDatalinkFeatureStore((s) => s.ethernetForm);
@@ -15,7 +15,7 @@ export function EthernetConnectPanel() {
   const isConnected = ethernet?.state === 'connected';
 
   return (
-    <section className="ethernet-panel" aria-label="Ethernet connection">
+    <section className="datalink-connect-panel" aria-label="Ethernet connection">
       <h2>SprintLink · Ethernet</h2>
       <div className="row">
         <label>

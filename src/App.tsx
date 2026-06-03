@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { DatalinkStatusBar } from '@/components/toolbar/DatalinkStatusBar';
 import { EthernetConnectPanel } from '@/components/connection/EthernetConnectPanel';
+import { H16ConnectPanel } from '@/features/datalink/components/H16ConnectPanel';
 import { RouterStatusPanel } from '@/features/datalink/components/RouterStatusPanel';
 import { VehicleMonitorPanel } from '@/features/vehicle/components/VehicleMonitorPanel';
 import { MapDisplay } from '@/features/map/components/MapDisplay';
@@ -30,6 +31,7 @@ export default function App() {
         <aside className="flex w-full shrink-0 flex-col overflow-y-auto lg:w-[380px]">
           <VehicleMonitorPanel />
           <EthernetConnectPanel />
+          <H16ConnectPanel />
           <RouterStatusPanel />
         </aside>
       </main>

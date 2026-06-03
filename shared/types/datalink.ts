@@ -101,9 +101,27 @@ export interface EthernetConnectOptions {
 }
 
 export interface SerialConnectOptions {
+  /** OS serial device path (e.g. COM3, /dev/ttyUSB0) */
   path: string;
   baudRate: number;
 }
+
+/** Result of `datalink:serial:list` / SerialPort.list() */
+export interface SerialPortInfo {
+  path: string;
+  manufacturer?: string;
+  serialNumber?: string;
+  vendorId?: string;
+  productId?: string;
+}
+
+/** Default H16 / MAVLink serial baud (57600) */
+export const DEFAULT_H16_BAUD_RATE = 57600;
+
+/** Common baud rates for dropdown */
+export const H16_BAUD_RATE_OPTIONS = [
+  57600, 115200, 230400, 460800, 921600, 9600,
+] as const;
 
 export const DEFAULT_MAVLINK_PORT = 14550;
 
