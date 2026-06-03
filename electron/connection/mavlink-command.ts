@@ -10,6 +10,9 @@ const GCS_COMPONENT_ID = 190;
 
 const MAV_CMD_COMPONENT_ARM_DISARM = 400;
 const MAV_CMD_NAV_RETURN_TO_LAUNCH = 20;
+const MAV_CMD_DO_SET_MODE = 176;
+/** MAV_MODE_FLAG_CUSTOM_MODE_ENABLED */
+const MAV_MODE_FLAG_CUSTOM_MODE_ENABLED = 1;
 
 let outboundSeq = 0;
 
@@ -49,6 +52,17 @@ export function buildCommandFromGcsRequest(req: GcsCommandRequest): Buffer | nul
     case 'rtl':
       return encodeCommandLong({
         command: MAV_CMD_NAV_RETURN_TO_LAUNCH,
+        targetSystem,
+        targetComponent,
+      });
+    case 'set_mode':
+      if (req.customMode === undefined || !Number.isFinite(req.customMode)) {
+        return null;
+      }
+      return encodeCommandLong({
+        command: MAV_CMD_DO_SET_MODE,
+        param1: MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+        param2: req.customMode,
         targetSystem,
         targetComponent,
       });
@@ -106,7 +120,7 @@ function mavlinkCrc(data: Buffer, crcExtra: number): number {
   return crc & 0xffff;
 }
 
-export function gcsCommandLabel(command: GcsCommandType): string {
+export function gcsCommandLabel(command: GcsCommandType, reqCustomMode?: number): string {
   switch (command) {
     case 'arm':
       return 'ARM motors';
@@ -114,6 +128,10 @@ export function gcsCommandLabel(command: GcsCommandType): string {
       return 'DISARM motors';
     case 'rtl':
       return 'Return to Launch (RTL)';
+    case 'set_mode':
+      return reqCustomMode != null
+        ? `Set flight mode (custom_mode ${reqCustomMode})`
+        : 'Set flight mode';
     default:
       return String(command);
   }

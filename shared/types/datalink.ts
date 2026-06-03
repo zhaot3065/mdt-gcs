@@ -108,10 +108,12 @@ export interface SerialConnectOptions {
 export const DEFAULT_MAVLINK_PORT = 14550;
 
 /** High-level GCS commands (Main builds MAVLink COMMAND_LONG) */
-export type GcsCommandType = 'arm' | 'disarm' | 'rtl';
+export type GcsCommandType = 'arm' | 'disarm' | 'rtl' | 'set_mode';
 
 export interface GcsCommandRequest {
   command: GcsCommandType;
+  /** ArduPilot custom_mode — required when command is `set_mode` */
+  customMode?: number;
   /** MAVLink target_system — default 1 */
   targetSystem?: number;
   /** MAVLink target_component — default 1 (autopilot) */

@@ -1,6 +1,6 @@
 import type { GcsCommandType } from '@shared/types/datalink';
 
-const LABELS: Record<GcsCommandType, { title: string; detail: string; confirm: string }> = {
+const LABELS: Record<Exclude<GcsCommandType, 'set_mode'>, { title: string; detail: string; confirm: string }> = {
   arm: {
     title: '시동 (ARM)',
     detail: '프로펠러가 회전할 수 있습니다. 주변 안전을 확인하세요.',
@@ -20,6 +20,8 @@ const LABELS: Record<GcsCommandType, { title: string; detail: string; confirm: s
 
 interface Props {
   command: GcsCommandType;
+  /** For set_mode: human-readable mode name (e.g. LOITER) */
+  displayName?: string;
   activeRouteLabel: string | null;
   busy: boolean;
   onConfirm: () => void;
@@ -28,12 +30,20 @@ interface Props {
 
 export function CommandConfirmModal({
   command,
+  displayName,
   activeRouteLabel,
   busy,
   onConfirm,
   onCancel,
 }: Props) {
-  const copy = LABELS[command];
+  const isSetMode = command === 'set_mode';
+  const copy = isSetMode
+    ? {
+        title: `비행 모드 변경 — ${displayName ?? '?'}`,
+        detail: '아두파일럿 custom_mode가 변경됩니다. 주변 환경과 기체 상태를 확인하세요.',
+        confirm: `${displayName ?? '모드'} 전송`,
+      }
+    : LABELS[command];
 
   return (
     <div
@@ -53,7 +63,9 @@ export function CommandConfirmModal({
           <span className="font-mono text-sky-400">{activeRouteLabel ?? '없음'}</span>
         </p>
         <p className="mt-4 text-center text-sm font-medium text-slate-200">
-          정말 명령을 전송하시겠습니까?
+          {isSetMode
+            ? `정말 ${displayName} 모드로 변경하시겠습니까?`
+            : '정말 명령을 전송하시겠습니까?'}
         </p>
         <div className="mt-5 flex gap-2">
           <button
@@ -73,7 +85,9 @@ export function CommandConfirmModal({
                 ? 'bg-amber-600 hover:bg-amber-500 ring-1 ring-amber-400'
                 : command === 'arm'
                   ? 'bg-red-600 hover:bg-red-500 ring-1 ring-red-400'
-                  : 'bg-emerald-700 hover:bg-emerald-600 ring-1 ring-emerald-500'
+                  : command === 'set_mode'
+                    ? 'bg-sky-600 hover:bg-sky-500 ring-1 ring-sky-400'
+                    : 'bg-emerald-700 hover:bg-emerald-600 ring-1 ring-emerald-500'
             }`}
           >
             {busy ? '전송 중…' : copy.confirm}

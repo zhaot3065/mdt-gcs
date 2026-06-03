@@ -153,7 +153,9 @@ Renderer: Leaflet + `useVehicleStore` marker + `useMapStore` tile mode toggle.
 |---------|-----------|---------|
 | `datalink:send-command` | Renderer → Main (invoke) | `GcsCommandRequest` → `GcsCommandResult` |
 
-Main encodes MAVLink v2 `COMMAND_LONG` (arm/disarm/rtl) and sends **only** on `MavlinkRouter.activeLinkId` transport. Blocks if no active link or link not live.
+Main encodes MAVLink v2 `COMMAND_LONG` (arm/disarm/rtl/set_mode via `MAV_CMD_DO_SET_MODE`) and sends **only** on `MavlinkRouter.activeLinkId` transport. Blocks if no active link or link not live.
+
+Renderer: `FlightModeSelector` — dropdown + confirm modal; `customMode` in `GcsCommandRequest`.
 
 Preload: `window.gcs.vehicle.sendCommand(request)`.
 

@@ -1,5 +1,6 @@
 import { useVehicleStore } from '../store/use-vehicle-store';
 import { VehicleCommandControls } from './VehicleCommandControls';
+import { FlightModeSelector } from './FlightModeSelector';
 
 function fmtCoord(value: number | null, decimals = 6): string {
   if (value == null || !Number.isFinite(value)) return '—';
@@ -75,10 +76,9 @@ export function VehicleMonitorPanel() {
         </span>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-2 text-sm">
-        <div className="rounded-md bg-slate-800/80 p-2 ring-1 ring-slate-700">
-          <p className="text-xs text-slate-500">Flight mode</p>
-          <p className="font-mono text-lg font-semibold text-white">{heartbeat.flightMode}</p>
+      <div className="mb-4 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <FlightModeSelector />
         </div>
         <div className={`rounded-md p-2 ring-1 ${armedClass}`}>
           <p className="text-xs opacity-80">Armed</p>
